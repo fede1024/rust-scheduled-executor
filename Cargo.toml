@@ -1,0 +1,10 @@
+[package]
+name = "scheduled-executor"
+version = "0.1.0"
+authors = ["Federico Giraud <giraud.federico@gmail.com>"]
+
+[dependencies]
+tokio-timer="*"
+futures = "0.1.7"
+futures-cpupool = "0.1.2"
+tokio-core = "^0.1.4"
