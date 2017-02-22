@@ -7,6 +7,7 @@ use tokio_core::reactor::{Core, Handle};
 use futures_cpupool::{Builder, CpuPool};
 use tokio_timer::Timer;
 use futures::stream::Stream;
+use futures::sync::oneshot::{channel, Receiver, Sender};
 
 use std::time::{Duration, Instant};
 use std::cell::Cell;
@@ -14,49 +15,35 @@ use std::sync::atomic::AtomicUsize;
 use std::thread;
 use std::cell::RefCell;
 
-struct ExecutorCoreInner {
+pub struct ExecutorCore {
+    handle: Handle,
     cpu_pool: CpuPool,
     timer: Timer,
-    handle: Handle,
-}
-
-pub struct ExecutorCore {
-    core: RefCell<Core>,
-    inner: ExecutorCoreInner,
+    termination_sender: Sender<()>,
 }
 
 impl ExecutorCore {
     fn new(pool_size: usize) -> ExecutorCore {
-        let core = Core::new().unwrap();
-        let inner = ExecutorCoreInner {
+        let (tx, rx) = channel();
+        let mut core = Core::new().unwrap();
+        let remote = core.remote();
+        let handle = core.handle();
+        thread::spawn(move || {
+            println!("Core starting");
+            core.run(rx).unwrap();
+            println!("Core terminated");
+        });
+        ExecutorCore {
+            handle: handle,
             cpu_pool: Builder::new().pool_size(pool_size).name_prefix("pool").create(),
             timer: Timer::default(),
-            handle: core.handle(),
-        };
-        ExecutorCore {
-            core: RefCell::new(core),
-            inner: inner,
+            termination_sender: tx,
         }
     }
 
-    fn handle(&self) -> Handle {
-        self.core.borrow().handle()
-    }
-
-    fn timer(&self) -> &Timer {
-        &self.inner.timer
-    }
-
-    fn run(&self) {
-        let sleep = self.inner.timer.sleep(Duration::from_secs(20));
-        self.core.borrow_mut().run(sleep).unwrap();
-    }
-
-
-    fn task_group<'a, F, V>(&'a self, total_time: Duration, func: F) -> TaskGroup<'a, F, V>
+    fn task_group<F, V>(&self, total_time: Duration, func: F) -> TaskGroup<F, V>
             where F: Fn(V) + 'static, V: Send + 'static {
         TaskGroup {
-            executor_inner: &self.inner,
             total_time: total_time,
             values: Vec::new(),
             func: func,
@@ -66,8 +53,7 @@ impl ExecutorCore {
     }
 }
 
-pub struct TaskGroup<'a, F, V> where F: Fn(V), V: Send + 'static {
-    executor_inner: &'a ExecutorCoreInner,
+pub struct TaskGroup<F, V> where F: Fn(V), V: Send + 'static {
     total_time: Duration,
     func: F,
     values: Vec<V>,
@@ -75,20 +61,20 @@ pub struct TaskGroup<'a, F, V> where F: Fn(V), V: Send + 'static {
     generation_id: AtomicUsize,
 }
 
-impl<'a, F, V> TaskGroup<'a, F, V> where F: Fn(V) + 'static, V: Send + 'static {
-    fn add_task(&mut self, value: V) {
-        self.values.push(value);
-        let interval = self.total_time / (self.values.len() as u32);
-        let ticker = self.executor_inner.timer.interval(interval)
-            .map_err(|_| ())
-            .for_each(move |_| {
-                println!("TICK");
-                // Err(())
-                Ok(())
-            });
-        self.executor_inner.handle.spawn(ticker);
-        // thread::sleep_ms(10000);
-    }
+impl<F, V> TaskGroup<F, V> where F: Fn(V) + 'static, V: Send + 'static {
+    // fn add_task(&mut self, value: V) {
+    //     self.values.push(value);
+    //     let interval = self.total_time / (self.values.len() as u32);
+    //     let ticker = self.executor_inner.timer.interval(interval)
+    //         .map_err(|_| ())
+    //         .for_each(move |_| {
+    //             println!("TICK");
+    //             // Err(())
+    //             Ok(())
+    //         });
+    //     self.executor_inner.handle.spawn(ticker);
+    //     // thread::sleep_ms(10000);
+    // }
 }
 
 #[cfg(test)]
@@ -96,20 +82,44 @@ mod tests {
     use tokio_timer::*;
     use futures::*;
     use std::time::*;
-    use tokio_core::reactor::Core;
+    use tokio_core::reactor::{Core, Handle};
     use futures_cpupool::Builder;
     use std::thread;
 
     use ExecutorCore;
     use TaskGroup;
 
+    fn schedule(timer: Timer, handle: Handle) {
+        let timer_clone = timer.clone();
+        let handle_clone = handle.clone();
+        let sleep = timer.sleep(Duration::from_secs(1))
+            .then(move |_| {
+                println!("BLOOP");
+                schedule(timer_clone, handle_clone);
+                Ok(())
+            });
+        handle.spawn(sleep);
+    }
+
+    #[test]
+    fn sleep_loop() {
+        let timer = Timer::default();
+        let mut core = Core::new().unwrap();
+
+        schedule(timer.clone(), core.handle());
+
+        core.run(timer.sleep(Duration::from_secs(5)));
+        println!("PUFF");
+    }
+
+
     #[test]
     fn tasks_test() {
-        let core = ExecutorCore::new(4);
-        let mut task_group = core.task_group(Duration::from_secs(1), |v| println!(">> {:?}", v));
+        // let core = ExecutorCore::new(4);
+        // let mut task_group = core.task_group(Duration::from_secs(1), |v| println!(">> {:?}", v));
 
-        task_group.add_task("AAAA");
-        core.run();
+        // task_group.add_task("AAAA");
+        // core.run();
     }
 
     #[test]
