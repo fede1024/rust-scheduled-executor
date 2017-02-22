@@ -3,9 +3,10 @@ extern crate futures;
 extern crate tokio_core;
 extern crate futures_cpupool;
 
-use tokio_core::reactor::{Core, Handle};
+use tokio_core::reactor::{Core, Handle, Remote};
 use futures_cpupool::{Builder, CpuPool};
 use tokio_timer::Timer;
+use futures::future::Future;
 use futures::stream::Stream;
 use futures::sync::oneshot::{channel, Receiver, Sender};
 
@@ -15,30 +16,40 @@ use std::sync::atomic::AtomicUsize;
 use std::thread;
 use std::cell::RefCell;
 
+
+enum CoreSignal {
+    Terminate
+}
+
 pub struct ExecutorCore {
-    handle: Handle,
+    remote: Remote,
     cpu_pool: CpuPool,
     timer: Timer,
-    termination_sender: Sender<()>,
+    termination_sender: Sender<CoreSignal>,
 }
 
 impl ExecutorCore {
     fn new(pool_size: usize) -> ExecutorCore {
-        let (tx, rx) = channel();
-        let mut core = Core::new().unwrap();
-        let remote = core.remote();
-        let handle = core.handle();
-        thread::spawn(move || {
-            println!("Core starting");
-            core.run(rx).unwrap();
-            println!("Core terminated");
-        });
+        let (remote, termination_sender) = ExecutorCore::start_core_thread();
         ExecutorCore {
-            handle: handle,
+            remote: remote,
             cpu_pool: Builder::new().pool_size(pool_size).name_prefix("pool").create(),
             timer: Timer::default(),
-            termination_sender: tx,
+            termination_sender: termination_sender,
         }
+    }
+
+    fn start_core_thread() -> (Remote, Sender<CoreSignal>) {
+        let (termination_tx, termination_rx) = channel();
+        let (core_tx, core_rx) = channel();
+        thread::spawn(move || {
+            println!("Core starting");
+            let mut core = Core::new().unwrap();
+            core_tx.complete(core.remote());
+            core.run(termination_rx).unwrap();
+            println!("Core terminated");
+        });
+        (core_rx.wait().unwrap(), termination_tx)
     }
 
     fn task_group<F, V>(&self, total_time: Duration, func: F) -> TaskGroup<F, V>
@@ -89,37 +100,25 @@ mod tests {
     use ExecutorCore;
     use TaskGroup;
 
-    fn schedule(timer: Timer, handle: Handle) {
-        let timer_clone = timer.clone();
-        let handle_clone = handle.clone();
-        let sleep = timer.sleep(Duration::from_secs(1))
-            .then(move |_| {
-                println!("BLOOP");
-                schedule(timer_clone, handle_clone);
-                Ok(())
-            });
-        handle.spawn(sleep);
-    }
 
-    #[test]
-    fn sleep_loop() {
-        let timer = Timer::default();
-        let mut core = Core::new().unwrap();
+    // #[test]
+    // fn sleep_loop() {
+    //     let timer = Timer::default();
+    //     let mut core = Core::new().unwrap();
 
-        schedule(timer.clone(), core.handle());
+    //     schedule(timer.clone(), core.handle());
 
-        core.run(timer.sleep(Duration::from_secs(5)));
-        println!("PUFF");
-    }
+    //     core.run(timer.sleep(Duration::from_secs(5)));
+    //     println!("PUFF");
+    // }
 
 
     #[test]
     fn tasks_test() {
-        // let core = ExecutorCore::new(4);
-        // let mut task_group = core.task_group(Duration::from_secs(1), |v| println!(">> {:?}", v));
+        let core = ExecutorCore::new(4);
+        let mut task_group = core.task_group(Duration::from_secs(1), |v| println!(">> {:?}", v));
 
-        // task_group.add_task("AAAA");
-        // core.run();
+        task_group.add_task("AAAA");
     }
 
     #[test]
