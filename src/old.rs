@@ -25,4 +25,29 @@ mod tests {
         let next_run =  calc_next_run(t_30, t_20, 2, 3, Duration::from_secs(60));
         println!(">> {:?} {:?}", next_run, next_run - t_0);
     }
+
+    #[test]
+    fn sleep_loop() {
+        let timer = Timer::default();
+        let mut core = Core::new().unwrap();
+
+        let (termination_tx, termination_rx) = channel::<()>();
+
+        thread::spawn(move || {
+            thread::sleep_ms(3000);
+            termination_tx.complete(());
+        });
+
+        //schedule(timer.clone(), core.handle());
+        let sleep = timer.sleep(Duration::from_secs(1))
+            .then(|_| {
+                println!("HELLO");
+                Ok(())
+            });
+        core.handle().spawn(sleep);
+
+        println!(">> {:?}", core.run(termination_rx));
+        println!("PUFF");
+    }
+
 }
