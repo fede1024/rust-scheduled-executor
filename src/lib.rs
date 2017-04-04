@@ -68,17 +68,38 @@ impl ExecutorCore {
                         let p = Timeout::new(Duration::from_secs(i), &h).unwrap()
                             .then(move |_| {
                                 println!(">> {}", i);
-                                Ok::<(),()>(())
+                                Ok::<(), ()>(())
                             });
                         h.spawn(p);
                     }
-                    Ok::<(),()>(())
+                    Ok::<(), ()>(())
                 });
             handle.spawn(t);
-            Ok::<(),()>(())
+            Ok::<(), ()>(())
         });
     }
 
+    fn timeouts2<F>(&self, fun: F)
+        where F: Fn() -> Vec<i32> + Sized + Send + 'static
+    {
+        fn cycle<P>(remote: &Remote, f: P)
+            where P: Fn() -> Vec<i32> + Sized + Send + 'static
+        {
+            let remote_clone = remote.clone();
+            remote.spawn(|handle| {
+                let t = Timeout::new(Duration::from_secs(1), handle).unwrap()
+                    .then(move |_| {
+                        let v = f();
+                        println!("YOOOO");
+                        cycle(&remote_clone, f);
+                        Ok::<(),()>(())
+                    });
+                handle.spawn(t);
+                Ok::<(),()>(())
+            })
+        };
+        cycle(&self.remote, fun);
+    }
 }
 
 #[cfg(test)]
@@ -90,7 +111,10 @@ mod tests {
     #[test]
     fn core_test() {
         let core = ExecutorCore::new(4);
-        core.timeouts();
+        core.timeouts2(|| {
+            println!("Here");
+            Vec::new()
+        });
         println!("Started");
         thread::sleep_ms(5000);
         println!("Terminating core");
