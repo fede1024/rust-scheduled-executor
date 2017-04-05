@@ -20,106 +20,121 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 
-pub struct ExecutorCore {
+fn start_core_thread() -> (Remote, Sender<()>) {
+    let (termination_tx, termination_rx) = channel();
+    let (core_tx, core_rx) = channel();
+    thread::spawn(move || {
+        println!("Core starting");
+        let mut core = Core::new().expect("Failed to start core");
+        core_tx.complete(core.remote());
+        match core.run(termination_rx) {
+            Ok(v) => println!("Core terminated correctly {:?}", v),
+            Err(e) => println!("Core terminated with error: {:?}", e),
+        }
+    });
+    println!("Waiting for remote");
+    let remote = core_rx.wait().expect("Failed to receive remote");
+    println!("Remote received");
+    (remote, termination_tx)
+}
+
+fn schedule_tasks<G: TaskGroup>(task_group: Arc<G>, interval: Duration, remote: &Remote) {
+    let tasks = task_group.get_tasks();
+    if tasks.is_empty() {
+        return
+    }
+    let gap = interval / tasks.len() as u32;
+    remote.spawn(move |handle| {
+        for (i, task) in tasks.into_iter().enumerate() {
+            // Use loop and single timeout every time instead, to iterate over the loop
+            let task_group_clone = task_group.clone();
+            let t = Timeout::new(gap * i as u32, handle).unwrap()
+                .then(move |_| {
+                    task_group_clone.execute(task);
+                    Ok::<(), ()>(())
+                });
+            handle.spawn(t);
+        }
+        Ok::<(), ()>(())
+    });
+}
+
+fn schedule_group_refresh<G: TaskGroup>(task_group: Arc<G>, interval: Duration, remote: &Remote) {
+    schedule_tasks(task_group.clone(), interval, remote);
+    let remote_clone = remote.clone();
+    remote.spawn(move |handle| {
+        // Re-schedule itself with delay
+        Timeout::new(interval, handle).unwrap()
+            .then(move |_| {
+                schedule_group_refresh(task_group, interval, &remote_clone);
+                Ok::<(), ()>(())
+            })
+    });
+}
+
+pub trait TaskGroup: Send + Sync + 'static {
+    type TaskId: Send;
+    fn get_tasks(&self) -> Vec<Self::TaskId>;
+    fn execute(&self, Self::TaskId);
+}
+
+pub struct TaskGroupExecutor {
     pub remote: Remote,
     termination_sender: Sender<()>,
 }
 
-impl ExecutorCore {
-    fn new(pool_size: usize) -> ExecutorCore {
-        let (remote, termination_sender) = ExecutorCore::start_core_thread();
-        ExecutorCore {
+impl TaskGroupExecutor {
+    fn new(pool_size: usize) -> TaskGroupExecutor {
+        let (remote, termination_sender) = start_core_thread();
+        TaskGroupExecutor {
             remote: remote,
             termination_sender: termination_sender,
         }
-    }
-
-    fn start_core_thread() -> (Remote, Sender<()>) {
-        let (termination_tx, termination_rx) = channel();
-        let (core_tx, core_rx) = channel();
-        thread::spawn(move || {
-            println!("Core starting");
-            let mut core = Core::new().expect("Failed to start core");
-            core_tx.complete(core.remote());
-            match core.run(termination_rx) {
-                Ok(v) => println!("Core terminated correctly {:?}", v),
-                Err(e) => println!("Core terminated with error: {:?}", e),
-            }
-        });
-        println!("Waiting for remote");
-        let remote = core_rx.wait().expect("Failed to receive remote");
-        println!("Remote received");
-        (remote, termination_tx)
     }
 
     pub fn stop(self) {
         self.termination_sender.complete(());
     }
 
-    fn timeouts(&self) {
-        let remote = self.remote.clone();
-        let f = self.remote.spawn(move |handle| {
-            let t = Timeout::new(Duration::from_secs(1), handle).unwrap()
-                .then(move |_| {
-                    println!("YOOOO");
-                    let h = remote.handle().unwrap();
-                    for i in 0..3 {
-                        let j = i;
-                        let p = Timeout::new(Duration::from_secs(i), &h).unwrap()
-                            .then(move |_| {
-                                println!(">> {}", i);
-                                Ok::<(), ()>(())
-                            });
-                        h.spawn(p);
-                    }
-                    Ok::<(), ()>(())
-                });
-            handle.spawn(t);
-            Ok::<(), ()>(())
-        });
-    }
-
-    fn timeouts2<F>(&self, fun: F)
-        where F: Fn() -> Vec<i32> + Sized + Send + 'static
-    {
-        fn cycle<P>(remote: &Remote, f: P)
-            where P: Fn() -> Vec<i32> + Sized + Send + 'static
-        {
-            let remote_clone = remote.clone();
-            remote.spawn(|handle| {
-                let t = Timeout::new(Duration::from_secs(1), handle).unwrap()
-                    .then(move |_| {
-                        let v = f();
-                        println!("YOOOO");
-                        cycle(&remote_clone, f);
-                        Ok::<(),()>(())
-                    });
-                handle.spawn(t);
-                Ok::<(),()>(())
-            })
-        };
-        cycle(&self.remote, fun);
+    fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration) {
+        schedule_group_refresh(Arc::new(task_group), interval, &self.remote);
     }
 }
+
 
 #[cfg(test)]
 mod tests {
 
     use std::thread;
-    use ExecutorCore;
+    use std::time::Duration;
+    use TaskGroupExecutor;
+    use TaskGroup;
+
+    struct MyGroup;
+
+    impl TaskGroup for MyGroup {
+        type TaskId = i32;
+
+        fn get_tasks(&self) -> Vec<i32> {
+            println!("get tasks");
+            vec![0, 1, 2, 3, 4]
+        }
+
+        fn execute(&self, task_id: i32) {
+            println!("EXECUTE: {}", task_id);
+        }
+    }
 
     #[test]
     fn core_test() {
-        let core = ExecutorCore::new(4);
-        core.timeouts2(|| {
-            println!("Here");
-            Vec::new()
-        });
+        let executor = TaskGroupExecutor::new(5);
+        let group = MyGroup;
+        executor.run_task_group(group, Duration::from_secs(2));
         println!("Started");
-        thread::sleep_ms(5000);
+        thread::sleep_ms(20000);
         println!("Terminating core");
-        core.stop();
-        thread::sleep_ms(2000);
+        executor.stop();
+        thread::sleep_ms(1000);
         println!("The end");
     }
 }
