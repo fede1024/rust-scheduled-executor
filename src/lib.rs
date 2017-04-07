@@ -1,23 +1,16 @@
-extern crate tokio_timer;
 extern crate futures;
 extern crate tokio_core;
 extern crate futures_cpupool;
-extern crate rand;
 
 use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::oneshot::{channel, Receiver, Sender};
-use futures_cpupool::{Builder, CpuPool};
+use futures::sync::oneshot::{channel, Sender};
+use futures_cpupool::CpuPool;
 use tokio_core::reactor::{Core, Handle, Remote};
-use tokio_timer::Timer;
 use tokio_core::reactor::Timeout;
 
-use std::cell::Cell;
-use std::cell::RefCell;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 
 fn start_core_thread() -> (Remote, Sender<()>) {
@@ -26,7 +19,7 @@ fn start_core_thread() -> (Remote, Sender<()>) {
     thread::spawn(move || {
         println!("Core starting");
         let mut core = Core::new().expect("Failed to start core");
-        core_tx.complete(core.remote());
+        let _ = core_tx.send(core.remote());
         match core.run(termination_rx) {
             Ok(v) => println!("Core terminated correctly {:?}", v),
             Err(e) => println!("Core terminated with error: {:?}", e),
@@ -38,53 +31,62 @@ fn start_core_thread() -> (Remote, Sender<()>) {
     (remote, termination_tx)
 }
 
-fn schedule_tasks<G: TaskGroup>(task_group: Arc<G>, interval: Duration, remote: &Remote) {
+fn schedule_tasks<G: TaskGroup>(task_group: Arc<G>, interval: Duration, handle: &Handle, pool: Option<CpuPool>) {
     let tasks = task_group.get_tasks();
     if tasks.is_empty() {
         return
     }
-    let gap = interval / tasks.len() as u32;
-    remote.spawn(move |handle| {
-        for (i, task) in tasks.into_iter().enumerate() {
-            // Use loop and single timeout every time instead, to iterate over the loop
-            let task_group_clone = task_group.clone();
-            let t = Timeout::new(gap * i as u32, handle).unwrap()
-                .then(move |_| {
-                    task_group_clone.execute(task);
-                    Ok::<(), ()>(())
-                });
-            handle.spawn(t);
+    let task_interval = interval / tasks.len() as u32;
+    for (i, task) in tasks.into_iter().enumerate() {
+        let task_group_clone = task_group.clone();
+
+        match pool {
+            Some(ref cpu_pool) => {
+                let t = Timeout::new(task_interval * i as u32, handle).unwrap()
+                    .then(move |_| {
+                        task_group_clone.execute(task, None);
+                        Ok::<(), ()>(())
+                    });
+                handle.spawn(cpu_pool.spawn(t));
+            }
+            None => {
+                let handle_clone = handle.clone();
+                let t = Timeout::new(task_interval * i as u32, handle).unwrap()
+                    .then(move |_| {
+                        task_group_clone.execute(task, Some(handle_clone));
+                        Ok::<(), ()>(())
+                    });
+                handle.spawn(t);
+            }
         }
-        Ok::<(), ()>(())
-    });
+    }
 }
 
-fn schedule_group_refresh<G: TaskGroup>(task_group: Arc<G>, interval: Duration, remote: &Remote) {
-    schedule_tasks(task_group.clone(), interval, remote);
-    let remote_clone = remote.clone();
-    remote.spawn(move |handle| {
-        // Re-schedule itself with delay
-        Timeout::new(interval, handle).unwrap()
-            .then(move |_| {
-                schedule_group_refresh(task_group, interval, &remote_clone);
-                Ok::<(), ()>(())
-            })
-    });
+fn group_refresh<G: TaskGroup>(task_group: Arc<G>, interval: Duration, handle: &Handle, pool: Option<CpuPool>) {
+    // Re-schedule itself with delay
+    schedule_tasks(task_group.clone(), interval, handle, pool.clone());
+    let handle_clone = handle.clone();
+    let t = Timeout::new(interval, handle).unwrap()
+        .then(move |_| {
+            group_refresh(task_group, interval, &handle_clone, pool);
+            Ok::<(), ()>(())
+        });
+    handle.spawn(t);
 }
 
 pub trait TaskGroup: Send + Sync + 'static {
     type TaskId: Send;
     fn get_tasks(&self) -> Vec<Self::TaskId>;
-    fn execute(&self, Self::TaskId);
+    fn execute(&self, Self::TaskId, Option<Handle>);
 }
 
 pub struct TaskGroupExecutor {
-    pub remote: Remote,
+    remote: Remote,
     termination_sender: Sender<()>,
 }
 
 impl TaskGroupExecutor {
-    fn new(pool_size: usize) -> TaskGroupExecutor {
+    pub fn new() -> TaskGroupExecutor {
         let (remote, termination_sender) = start_core_thread();
         TaskGroupExecutor {
             remote: remote,
@@ -93,11 +95,15 @@ impl TaskGroupExecutor {
     }
 
     pub fn stop(self) {
-        self.termination_sender.complete(());
+        let _ = self.termination_sender.send(());
     }
 
-    fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration) {
-        schedule_group_refresh(Arc::new(task_group), interval, &self.remote);
+    pub fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration, cpu_pool: Option<&CpuPool>) {
+        let cpu_pool = cpu_pool.cloned();
+        self.remote.spawn(move |handle| {
+            group_refresh(Arc::new(task_group), interval, handle, cpu_pool);
+            Ok::<(), ()>(())
+        });
     }
 }
 
@@ -107,6 +113,8 @@ mod tests {
 
     use std::thread;
     use std::time::Duration;
+    use tokio_core::reactor::Handle;
+    use futures_cpupool::Builder;
     use TaskGroupExecutor;
     use TaskGroup;
 
@@ -120,21 +128,22 @@ mod tests {
             vec![0, 1, 2, 3, 4]
         }
 
-        fn execute(&self, task_id: i32) {
-            println!("EXECUTE: {}", task_id);
+        fn execute(&self, task_id: i32, handle: Option<Handle>) {
+            println!("TASK: {} {:?} {:?}", task_id, thread::current().name(), handle);
         }
     }
 
     #[test]
     fn core_test() {
-        let executor = TaskGroupExecutor::new(5);
+        let executor = TaskGroupExecutor::new();
         let group = MyGroup;
-        executor.run_task_group(group, Duration::from_secs(2));
+        let cpu_pool = Builder::new().name_prefix("lol-").pool_size(4).create();
+        executor.run_task_group(group, Duration::from_secs(1), Some(&cpu_pool));
         println!("Started");
-        thread::sleep_ms(20000);
+        thread::sleep(Duration::from_secs(10));
         println!("Terminating core");
         executor.stop();
-        thread::sleep_ms(1000);
+        thread::sleep(Duration::from_secs(1));
         println!("The end");
     }
 }
