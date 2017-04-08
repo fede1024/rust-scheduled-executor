@@ -1,10 +1,7 @@
 use futures::future::Future;
 use futures::sync::oneshot::{channel, Sender};
-use futures_cpupool::CpuPool;
 use tokio_core::reactor::{Core, Handle, Remote};
 use tokio_core::reactor::Timeout;
-
-use task_group::{TaskGroup, schedule_tasks};
 
 use std::sync::Arc;
 use std::thread;
@@ -65,13 +62,6 @@ impl Executor {
             Ok::<(), ()>(())
         });
     }
-
-    pub fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration, cpu_pool: Option<CpuPool>) {
-        let task_group = Arc::new(task_group);
-        self.schedule_fixed_rate(interval, move |handle| {
-            schedule_tasks(task_group.clone(), interval, handle, cpu_pool.clone());
-        });
-    }
 }
 
 
@@ -80,10 +70,7 @@ impl Executor {
 mod tests {
     use std::thread;
     use std::time::Duration;
-    use tokio_core::reactor::Handle;
-    use futures_cpupool::Builder;
     use Executor;
-    use task_group::TaskGroup;
 
     #[test]
     fn fixed_rate_test() {
@@ -93,35 +80,6 @@ mod tests {
         executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
             println!("> LOOOLL {}", i);
         });
-        thread::sleep(Duration::from_secs(5));
-        println!("Terminating core");
-        executor.stop();
-        thread::sleep(Duration::from_secs(1));
-        println!("The end");
-    }
-
-    struct MyGroup;
-
-    impl TaskGroup for MyGroup {
-        type TaskId = i32;
-
-        fn get_tasks(&self) -> Vec<i32> {
-            println!("get tasks");
-            vec![0, 1, 2, 3, 4]
-        }
-
-        fn execute(&self, task_id: i32, handle: Option<Handle>) {
-            println!("TASK: {} {:?} {:?}", task_id, thread::current().name(), handle);
-        }
-    }
-
-    #[test]
-    fn task_group_test() {
-        let executor = Executor::new();
-        let group = MyGroup;
-        let cpu_pool = Builder::new().name_prefix("lol-").pool_size(4).create();
-        executor.run_task_group(group, Duration::from_secs(1), Some(cpu_pool));
-        println!("Started");
         thread::sleep(Duration::from_secs(5));
         println!("Terminating core");
         executor.stop();
