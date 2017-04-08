@@ -62,16 +62,18 @@ fn schedule_tasks<G: TaskGroup>(task_group: Arc<G>, interval: Duration, handle: 
     }
 }
 
-fn group_refresh<G: TaskGroup>(task_group: Arc<G>, interval: Duration, handle: &Handle, pool: Option<CpuPool>) {
-    // Re-schedule itself with delay
-    schedule_tasks(task_group.clone(), interval, handle, pool.clone());
+fn timer_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle)
+where F: Fn(&Handle) + Send + 'static
+{
     let handle_clone = handle.clone();
+    let scheduled_fn_clone = scheduled_fn.clone();
     let t = Timeout::new(interval, handle).unwrap()
         .then(move |_| {
-            group_refresh(task_group, interval, &handle_clone, pool);
+            timer_loop(scheduled_fn_clone, interval, &handle_clone);
             Ok::<(), ()>(())
         });
     handle.spawn(t);
+    scheduled_fn(&handle);
 }
 
 pub trait TaskGroup: Send + Sync + 'static {
@@ -98,10 +100,18 @@ impl TaskGroupExecutor {
         let _ = self.termination_sender.send(());
     }
 
-    pub fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration, cpu_pool: Option<&CpuPool>) {
-        let cpu_pool = cpu_pool.cloned();
+    pub fn run_task_group<G: TaskGroup>(&self, task_group: G, interval: Duration, cpu_pool: Option<CpuPool>) {
+        let task_group = Arc::new(task_group);
+        self.schedule_rate(interval, move |handle| {
+            schedule_tasks(task_group.clone(), interval, handle, cpu_pool.clone());
+        });
+    }
+
+    pub fn schedule_rate<F>(&self, interval: Duration, scheduled_fn: F)
+    where F: Fn(&Handle) + Send + 'static
+    {
         self.remote.spawn(move |handle| {
-            group_refresh(Arc::new(task_group), interval, handle, cpu_pool);
+            timer_loop(Arc::new(scheduled_fn), interval, handle);
             Ok::<(), ()>(())
         });
     }
@@ -134,13 +144,28 @@ mod tests {
     }
 
     #[test]
-    fn core_test() {
+    fn task_group_test() {
         let executor = TaskGroupExecutor::new();
         let group = MyGroup;
         let cpu_pool = Builder::new().name_prefix("lol-").pool_size(4).create();
-        executor.run_task_group(group, Duration::from_secs(1), Some(&cpu_pool));
+        executor.run_task_group(group, Duration::from_secs(1), Some(cpu_pool));
         println!("Started");
-        thread::sleep(Duration::from_secs(10));
+        thread::sleep(Duration::from_secs(5));
+        println!("Terminating core");
+        executor.stop();
+        thread::sleep(Duration::from_secs(1));
+        println!("The end");
+    }
+
+    #[test]
+    fn fixed_rate_test() {
+        let executor = TaskGroupExecutor::new();
+        println!("Started");
+        let i = 0;
+        executor.schedule_rate(Duration::from_secs(1), move |_handle| {
+            println!("> LOOOLL {}", i);
+        });
+        thread::sleep(Duration::from_secs(5));
         println!("Terminating core");
         executor.stop();
         thread::sleep(Duration::from_secs(1));
