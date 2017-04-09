@@ -28,7 +28,8 @@ pub struct Executor {
 }
 
 impl Executor {
-    // use logging
+    // TODO: use logging
+    // TODO: make thread name settable
     pub fn new() -> Executor {
         let (termination_tx, termination_rx) = channel();
         let (core_tx, core_rx) = channel();

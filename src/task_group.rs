@@ -12,6 +12,7 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
     type TaskId: Send;
 
     fn get_tasks(&self) -> Vec<Self::TaskId>;
+
     fn execute(&self, Self::TaskId, Option<Handle>);
 
     fn schedule(self, interval: Duration, executor: &Executor, cpu_pool: Option<CpuPool>) -> Arc<Self> {
