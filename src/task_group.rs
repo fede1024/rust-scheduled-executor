@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn task_group_test() {
-        let executor = Executor::new();
+        let executor = Executor::new("executor").unwrap();
         let group = MyGroup;
         let cpu_pool = Builder::new().name_prefix("lol-").pool_size(4).create();
         group.schedule(Duration::from_secs(1), &executor, Some(cpu_pool));

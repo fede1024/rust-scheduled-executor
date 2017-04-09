@@ -4,8 +4,9 @@ use tokio_core::reactor::{Core, Handle, Remote};
 use tokio_core::reactor::Timeout;
 
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use std::io;
 
 
 fn timer_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle)
@@ -25,30 +26,31 @@ fn timer_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle)
 pub struct Executor {
     remote: Remote,
     termination_sender: Sender<()>,
+    _thread_handle: JoinHandle<()>,
 }
 
 impl Executor {
-    // TODO: use logging
-    // TODO: make thread name settable
-    pub fn new() -> Executor {
+    pub fn new(thread_name: &str) -> Result<Executor, io::Error> {
         let (termination_tx, termination_rx) = channel();
         let (core_tx, core_rx) = channel();
-        thread::spawn(move || {
-            println!("Core starting");
-            let mut core = Core::new().expect("Failed to start core");
-            let _ = core_tx.send(core.remote());
-            match core.run(termination_rx) {
-                Ok(v) => println!("Core terminated correctly {:?}", v),
-                Err(e) => println!("Core terminated with error: {:?}", e),
-            }
-        });
-        println!("Waiting for remote");
-        let remote = core_rx.wait().expect("Failed to receive remote");
-        println!("Remote received");
-        Executor {
-            remote: remote,
+        let thread_handle = thread::Builder::new()
+            .name(thread_name.to_owned())
+            .spawn(move || {
+                debug!("Core starting");
+                let mut core = Core::new().expect("Failed to start core");
+                let _ = core_tx.send(core.remote());
+                match core.run(termination_rx) {
+                    Ok(v) => println!("Core terminated correctly {:?}", v),
+                    Err(e) => println!("Core terminated with error: {:?}", e),
+                }
+            })?;
+        let executor = Executor {
+            remote: core_rx.wait().expect("Failed to receive remote"),
             termination_sender: termination_tx,
-        }
+            _thread_handle: thread_handle,
+        };
+        debug!("Executor created");
+        Ok(executor)
     }
 
     pub fn stop(self) {
@@ -75,7 +77,7 @@ mod tests {
 
     #[test]
     fn fixed_rate_test() {
-        let executor = Executor::new();
+        let executor = Executor::new("executor").unwrap();
         println!("Started");
         let i = 0;
         executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
