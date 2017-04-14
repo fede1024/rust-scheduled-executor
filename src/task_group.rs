@@ -56,42 +56,80 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
     }
 }
 
-// TODO: write proper tests
 #[cfg(test)]
 mod tests {
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
+    use std::sync::{Arc, RwLock};
     use tokio_core::reactor::Handle;
     use futures_cpupool::Builder;
-    use Executor;
     use task_group::TaskGroup;
 
-    struct MyGroup;
+    use Executor;
 
-    impl TaskGroup for MyGroup {
-        type TaskId = i32;
+    type TaskExecutions = Vec<Vec<Instant>>;
+    struct TestGroup {
+        executions_lock: Arc<RwLock<TaskExecutions>>,
+    }
 
-        fn get_tasks(&self) -> Vec<i32> {
-            println!("get tasks");
+    impl TestGroup {
+        fn new() -> TestGroup {
+            let executions = (0..5).map(|_| Vec::new()).collect::<Vec<_>>();
+            TestGroup {
+                executions_lock : Arc::new(RwLock::new(executions))
+            }
+        }
+
+        fn executions_lock(&self) -> Arc<RwLock<TaskExecutions>> {
+            self.executions_lock.clone()
+        }
+    }
+
+    impl TaskGroup for TestGroup {
+        type TaskId = usize;
+
+        fn get_tasks(&self) -> Vec<usize> {
             vec![0, 1, 2, 3, 4]
         }
 
-        fn execute(&self, task_id: i32, handle: Option<Handle>) {
-            println!("TASK: {} {:?} {:?}", task_id, thread::current().name(), handle);
+        fn execute(&self, task_id: usize, handle: Option<Handle>) {
+            let mut executions = self.executions_lock.write().unwrap();
+            executions[task_id].push(Instant::now());
+            assert!(handle.is_none());
         }
     }
 
     #[test]
     fn task_group_test() {
         let executor = Executor::new("executor").unwrap();
-        let group = MyGroup;
-        let cpu_pool = Builder::new().name_prefix("lol-").pool_size(4).create();
+        let cpu_pool = Builder::new().name_prefix("pool-thread-").pool_size(4).create();
+        let group = TestGroup::new();
+        let executions_lock = group.executions_lock();
         group.schedule(Duration::from_secs(1), &executor, Some(cpu_pool));
-        println!("Started");
-        thread::sleep(Duration::from_secs(5));
-        println!("Terminating core");
+        thread::sleep(Duration::from_millis(4950));
         executor.stop();
-        thread::sleep(Duration::from_secs(1));
-        println!("The end");
+
+        let executions = &executions_lock.read().unwrap();
+        // There were 5 tasks
+        assert!(executions.len() == 5);
+        for task in 0..5 {
+            // each of them executed 6 times
+            assert!(executions[task].len() == 5);
+            for run in 1..5 {
+                // with one second between each of them
+                let task_interval = executions[task][run] - executions[task][run-1];
+                assert!(task_interval < Duration::from_millis(1020));
+                assert!(task_interval > Duration::from_millis(980));
+            }
+        }
+        for i in 1..25 {
+            let task = i % 5;
+            let run = i / 5;
+            let task_prev = (i - 1) % 5;
+            let run_prev = (i - 1) / 5;
+            let inter_task_interval = executions[task][run] - executions[task_prev][run_prev];
+            assert!(inter_task_interval < Duration::from_millis(220));
+            assert!(inter_task_interval > Duration::from_millis(180));
+        }
     }
 }

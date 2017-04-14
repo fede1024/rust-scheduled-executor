@@ -26,7 +26,7 @@ fn timer_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle)
 pub struct Executor {
     remote: Remote,
     termination_sender: Sender<()>,
-    _thread_handle: JoinHandle<()>,
+    thread_handle: JoinHandle<()>,
 }
 
 impl Executor {
@@ -40,14 +40,14 @@ impl Executor {
                 let mut core = Core::new().expect("Failed to start core");
                 let _ = core_tx.send(core.remote());
                 match core.run(termination_rx) {
-                    Ok(v) => println!("Core terminated correctly {:?}", v),
-                    Err(e) => println!("Core terminated with error: {:?}", e),
+                    Ok(v) => debug!("Core terminated correctly {:?}", v),
+                    Err(e) => debug!("Core terminated with error: {:?}", e),
                 }
             })?;
         let executor = Executor {
             remote: core_rx.wait().expect("Failed to receive remote"),
             termination_sender: termination_tx,
-            _thread_handle: thread_handle,
+            thread_handle: thread_handle,
         };
         debug!("Executor created");
         Ok(executor)
@@ -55,6 +55,7 @@ impl Executor {
 
     pub fn stop(self) {
         let _ = self.termination_sender.send(());
+        let _ = self.thread_handle.join();
     }
 
     pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
@@ -68,25 +69,30 @@ impl Executor {
 }
 
 
-// TODO: write proper tests
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, RwLock};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use Executor;
 
     #[test]
     fn fixed_rate_test() {
+        let timings = Arc::new(RwLock::new(Vec::new()));
         let executor = Executor::new("executor").unwrap();
-        println!("Started");
-        let i = 0;
+        let timings_clone = Arc::clone(&timings);
         executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-            println!("> LOOOLL {}", i);
+            timings_clone.write().unwrap().push(Instant::now());
         });
-        thread::sleep(Duration::from_secs(5));
-        println!("Terminating core");
+        thread::sleep(Duration::from_millis(5200));
         executor.stop();
-        thread::sleep(Duration::from_secs(1));
-        println!("The end");
+
+        let timings = timings.read().unwrap();
+        assert!(timings.len() == 6);
+        for i in 1..6 {
+            let execution_interval = timings[i] - timings[i-1];
+            assert!(execution_interval < Duration::from_millis(1020));
+            assert!(execution_interval > Duration::from_millis(980));
+        }
     }
 }
