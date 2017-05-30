@@ -18,7 +18,7 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
     fn schedule(self, interval: Duration, executor: &Executor, cpu_pool: Option<CpuPool>) -> Arc<Self> {
         let task_group = Arc::new(self);
         let task_group_clone = task_group.clone();
-        executor.schedule_fixed_rate(interval, move |handle| {
+        executor.schedule_fixed_interval(interval, move |handle| {
             Self::schedule_tasks(&task_group_clone, interval, handle, &cpu_pool);
         });
         task_group
@@ -101,13 +101,13 @@ mod tests {
 
     #[test]
     fn task_group_test() {
-        let executor = Executor::new("executor").unwrap();
+        let executor = Executor::new().unwrap();
         let cpu_pool = Builder::new().name_prefix("pool-thread-").pool_size(4).create();
         let group = TestGroup::new();
         let executions_lock = group.executions_lock();
         group.schedule(Duration::from_secs(1), &executor, Some(cpu_pool));
         thread::sleep(Duration::from_millis(4950));
-        executor.stop();
+        executor.stop_sync();
 
         let executions = &executions_lock.read().unwrap();
         // There were 5 tasks
@@ -118,8 +118,8 @@ mod tests {
             for run in 1..5 {
                 // with one second between each of them
                 let task_interval = executions[task][run] - executions[task][run-1];
-                assert!(task_interval < Duration::from_millis(1020));
-                assert!(task_interval > Duration::from_millis(980));
+                assert!(task_interval < Duration::from_millis(1100));
+                assert!(task_interval > Duration::from_millis(900));
             }
         }
         for i in 1..25 {
@@ -128,8 +128,8 @@ mod tests {
             let task_prev = (i - 1) % 5;
             let run_prev = (i - 1) / 5;
             let inter_task_interval = executions[task][run] - executions[task_prev][run_prev];
-            assert!(inter_task_interval < Duration::from_millis(220));
-            assert!(inter_task_interval > Duration::from_millis(180));
+            assert!(inter_task_interval < Duration::from_millis(250));
+            assert!(inter_task_interval > Duration::from_millis(150));
         }
     }
 }
