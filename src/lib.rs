@@ -6,7 +6,7 @@ extern crate futures_cpupool;
 pub mod executor;
 pub mod task_group;
 
-pub use executor::Executor;
+pub use executor::CoreExecutor;
 pub use task_group::TaskGroup;
 pub use futures_cpupool::CpuPool;
 pub use tokio_core::reactor::Handle;

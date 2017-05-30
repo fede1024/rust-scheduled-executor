@@ -64,18 +64,36 @@ fn fixed_rate_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle,
     handle.spawn(t);
 }
 
-pub struct Executor {
+
+struct CoreExecutorInner {
     remote: Remote,
-    termination_sender: Sender<()>,
-    thread_handle: JoinHandle<()>,
+    termination_sender: Option<Sender<()>>,
+    thread_handle: Option<JoinHandle<()>>,
 }
 
-impl Executor {
-    pub fn new() -> Result<Executor, io::Error> {
-        Executor::with_name("executor")
+impl Drop for CoreExecutorInner {
+    fn drop(&mut self) {
+        let _ = self.termination_sender.take().unwrap().send(());
+        let _ = self.thread_handle.take().unwrap().join();
+    }
+}
+
+pub struct CoreExecutor {
+    inner: Arc<CoreExecutorInner>
+}
+
+impl Clone for CoreExecutor {
+    fn clone(&self) -> Self {
+        CoreExecutor { inner: Arc::clone(&self.inner) }
+    }
+}
+
+impl CoreExecutor {
+    pub fn new() -> Result<CoreExecutor, io::Error> {
+        CoreExecutor::with_name("executor")
     }
 
-    pub fn with_name(thread_name: &str) -> Result<Executor, io::Error> {
+    pub fn with_name(thread_name: &str) -> Result<CoreExecutor, io::Error> {
         let (termination_tx, termination_rx) = channel();
         let (core_tx, core_rx) = channel();
         let thread_handle = thread::Builder::new()
@@ -89,28 +107,22 @@ impl Executor {
                     Err(e) => debug!("Core terminated with error: {:?}", e),
                 }
             })?;
-        let executor = Executor {
+        let inner = CoreExecutorInner {
             remote: core_rx.wait().expect("Failed to receive remote"),
-            termination_sender: termination_tx,
-            thread_handle: thread_handle,
+            termination_sender: Some(termination_tx),
+            thread_handle: Some(thread_handle),
+        };
+        let executor = CoreExecutor {
+            inner: Arc::new(inner)
         };
         debug!("Executor created");
         Ok(executor)
     }
 
-    pub fn stop_async(self) {
-        let _ = self.termination_sender.send(());
-    }
-
-    pub fn stop_sync(self) {
-        let _ = self.termination_sender.send(());
-        let _ = self.thread_handle.join();
-    }
-
     pub fn schedule_fixed_interval<F>(&self, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
-        self.remote.spawn(move |handle| {
+        self.inner.remote.spawn(move |handle| {
             fixed_interval_loop(Arc::new(scheduled_fn), interval, handle);
             Ok::<(), ()>(())
         });
@@ -119,7 +131,7 @@ impl Executor {
     pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
-        self.remote.spawn(move |handle| {
+        self.inner.remote.spawn(move |handle| {
             fixed_rate_loop(Arc::new(scheduled_fn), interval, handle, Duration::from_secs(0));
             Ok::<(), ()>(())
         });
@@ -133,18 +145,19 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    use super::{Executor, calculate_delay};
+    use super::{CoreExecutor, calculate_delay};
 
     #[test]
     fn fixed_interval_test() {
         let timings = Arc::new(RwLock::new(Vec::new()));
-        let executor = Executor::new().unwrap();
-        let timings_clone = Arc::clone(&timings);
-        executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-            timings_clone.write().unwrap().push(Instant::now());
-        });
-        thread::sleep(Duration::from_millis(5500));
-        executor.stop_sync();
+        {
+            let executor = CoreExecutor::new().unwrap();
+            let timings_clone = Arc::clone(&timings);
+            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
+                timings_clone.write().unwrap().push(Instant::now());
+            });
+            thread::sleep(Duration::from_millis(5500));
+        }
 
         let timings = timings.read().unwrap();
         assert!(timings.len() == 6);
@@ -157,18 +170,19 @@ mod tests {
 
     #[test]
     fn fixed_interval_slow_task_test() {
-        let executor = Executor::new().unwrap();
         let counter = Arc::new(RwLock::new(0));
         let counter_clone = Arc::clone(&counter);
-        executor.schedule_fixed_interval(Duration::from_secs(1), move |_handle| {
-            let mut counter = counter_clone.write().unwrap();
-            (*counter) += 1;
-            if *counter == 1 {
-                thread::sleep(Duration::from_secs(3));
-            }
-        });
-        thread::sleep(Duration::from_millis(5500));
-        executor.stop_sync();
+        {
+            let executor = CoreExecutor::new().unwrap();
+            executor.schedule_fixed_interval(Duration::from_secs(1), move |_handle| {
+                let mut counter = counter_clone.write().unwrap();
+                (*counter) += 1;
+                if *counter == 1 {
+                    thread::sleep(Duration::from_secs(3));
+                }
+            });
+            thread::sleep(Duration::from_millis(5500));
+        }
         assert_eq!(*counter.read().unwrap(), 4);
     }
 
@@ -184,32 +198,34 @@ mod tests {
 
     #[test]
     fn fixed_rate_test() {
-        let executor = Executor::new().unwrap();
         let counter = Arc::new(RwLock::new(0));
         let counter_clone = Arc::clone(&counter);
-        executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-            let mut counter = counter_clone.write().unwrap();
-            (*counter) += 1;
-        });
-        thread::sleep(Duration::from_millis(5500));
-        executor.stop_sync();
+        {
+            let executor = CoreExecutor::new().unwrap();
+            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
+                let mut counter = counter_clone.write().unwrap();
+                (*counter) += 1;
+            });
+            thread::sleep(Duration::from_millis(5500));
+        }
         assert_eq!(*counter.read().unwrap(), 6);
     }
 
     #[test]
     fn fixed_rate_slow_task_test() {
-        let executor = Executor::new().unwrap();
         let counter = Arc::new(RwLock::new(0));
         let counter_clone = Arc::clone(&counter);
-        executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-            let mut counter = counter_clone.write().unwrap();
-            (*counter) += 1;
-            if *counter == 1 {
-                thread::sleep(Duration::from_secs(3));
-            }
-        });
-        thread::sleep(Duration::from_millis(5500));
-        executor.stop_sync();
+        {
+            let executor = CoreExecutor::new().unwrap();
+            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
+                let mut counter = counter_clone.write().unwrap();
+                (*counter) += 1;
+                if *counter == 1 {
+                    thread::sleep(Duration::from_secs(3));
+                }
+            });
+            thread::sleep(Duration::from_millis(5500));
+        }
         assert_eq!(*counter.read().unwrap(), 6);
     }
 }

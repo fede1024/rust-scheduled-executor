@@ -3,7 +3,7 @@ use futures_cpupool::CpuPool;
 use tokio_core::reactor::Handle;
 use tokio_core::reactor::Timeout;
 
-use executor::Executor;
+use executor::CoreExecutor;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,7 +15,7 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
 
     fn execute(&self, Self::TaskId, Option<Handle>);
 
-    fn schedule(self, interval: Duration, executor: &Executor, cpu_pool: Option<CpuPool>) -> Arc<Self> {
+    fn schedule(self, interval: Duration, executor: &CoreExecutor, cpu_pool: Option<CpuPool>) -> Arc<Self> {
         let task_group = Arc::new(self);
         let task_group_clone = task_group.clone();
         executor.schedule_fixed_interval(interval, move |handle| {
@@ -65,7 +65,7 @@ mod tests {
     use futures_cpupool::Builder;
     use task_group::TaskGroup;
 
-    use Executor;
+    use CoreExecutor;
 
     type TaskExecutions = Vec<Vec<Instant>>;
     struct TestGroup {
@@ -101,35 +101,36 @@ mod tests {
 
     #[test]
     fn task_group_test() {
-        let executor = Executor::new().unwrap();
-        let cpu_pool = Builder::new().name_prefix("pool-thread-").pool_size(4).create();
         let group = TestGroup::new();
         let executions_lock = group.executions_lock();
-        group.schedule(Duration::from_secs(1), &executor, Some(cpu_pool));
-        thread::sleep(Duration::from_millis(4950));
-        executor.stop_sync();
+        {
+            let executor = CoreExecutor::new().unwrap();
+            let cpu_pool = Builder::new().name_prefix("pool-thread-").pool_size(4).create();
+            group.schedule(Duration::from_secs(4), &executor, Some(cpu_pool));
+            thread::sleep(Duration::from_millis(11800));
+        }
 
         let executions = &executions_lock.read().unwrap();
         // There were 5 tasks
         assert!(executions.len() == 5);
         for task in 0..5 {
-            // each of them executed 6 times
-            assert!(executions[task].len() == 5);
-            for run in 1..5 {
-                // with one second between each of them
+            // each of them executed 3 times
+            assert!(executions[task].len() == 3);
+            for run in 1..3 {
+                // with 4 seconds between each of them
                 let task_interval = executions[task][run] - executions[task][run-1];
-                assert!(task_interval < Duration::from_millis(1100));
-                assert!(task_interval > Duration::from_millis(900));
+                assert!(task_interval < Duration::from_millis(4500));
+                assert!(task_interval > Duration::from_millis(500));
             }
         }
-        for i in 1..25 {
+        for i in 1..15 {
             let task = i % 5;
             let run = i / 5;
             let task_prev = (i - 1) % 5;
             let run_prev = (i - 1) / 5;
             let inter_task_interval = executions[task][run] - executions[task_prev][run_prev];
-            assert!(inter_task_interval < Duration::from_millis(250));
-            assert!(inter_task_interval > Duration::from_millis(150));
+            assert!(inter_task_interval < Duration::from_millis(1500));
+            assert!(inter_task_interval > Duration::from_millis(500));
         }
     }
 }
