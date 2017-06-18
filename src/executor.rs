@@ -138,6 +138,7 @@ impl CoreExecutor {
 }
 
 
+#[derive(Clone)]
 pub struct ThreadPoolExecutor {
     executor: CoreExecutor,
     pool: CpuPool
