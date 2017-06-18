@@ -1,5 +1,6 @@
 use futures::future::Future;
 use futures::sync::oneshot::{channel, Sender};
+use futures_cpupool::{Builder, CpuPool};
 use tokio_core::reactor::{Core, Handle, Remote};
 use tokio_core::reactor::Timeout;
 
@@ -9,7 +10,7 @@ use std::time::{Instant, Duration};
 use std::io;
 
 
-fn fixed_interval_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle)
+fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle)
     where F: Fn(&Handle) + Send + 'static
 {
     let start_time = Instant::now();
@@ -21,10 +22,9 @@ fn fixed_interval_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Han
         interval - execution
     };
     let handle_clone = handle.clone();
-    let scheduled_fn_clone = scheduled_fn.clone();
     let t = Timeout::new(next_iter_wait, handle).unwrap()
         .then(move |_| {
-            fixed_interval_loop(scheduled_fn_clone, interval, &handle_clone);
+            fixed_interval_loop(scheduled_fn, interval, &handle_clone);
             Ok::<(), ()>(())
         });
     handle.spawn(t);
@@ -47,7 +47,7 @@ fn calculate_delay(interval: Duration, execution: Duration, delay: Duration) -> 
     }
 }
 
-fn fixed_rate_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle, delay: Duration)
+fn fixed_rate_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, delay: Duration)
     where F: Fn(&Handle) + Send + 'static
 {
     let start_time = Instant::now();
@@ -55,10 +55,9 @@ fn fixed_rate_loop<F>(scheduled_fn: Arc<F>, interval: Duration, handle: &Handle,
     let execution = start_time.elapsed();
     let (next_iter_wait, updated_delay) = calculate_delay(interval, execution, delay);
     let handle_clone = handle.clone();
-    let scheduled_fn_clone = scheduled_fn.clone();
     let t = Timeout::new(next_iter_wait, handle).unwrap()
         .then(move |_| {
-            fixed_rate_loop(scheduled_fn_clone, interval, &handle_clone, updated_delay);
+            fixed_rate_loop(scheduled_fn, interval, &handle_clone, updated_delay);
             Ok::<(), ()>(())
         });
     handle.spawn(t);
@@ -90,7 +89,7 @@ impl Clone for CoreExecutor {
 
 impl CoreExecutor {
     pub fn new() -> Result<CoreExecutor, io::Error> {
-        CoreExecutor::with_name("executor")
+        CoreExecutor::with_name("core_executor")
     }
 
     pub fn with_name(thread_name: &str) -> Result<CoreExecutor, io::Error> {
@@ -123,7 +122,7 @@ impl CoreExecutor {
         where F: Fn(&Handle) + Send + 'static
     {
         self.inner.remote.spawn(move |handle| {
-            fixed_interval_loop(Arc::new(scheduled_fn), interval, handle);
+            fixed_interval_loop(scheduled_fn, interval, handle);
             Ok::<(), ()>(())
         });
     }
@@ -132,12 +131,47 @@ impl CoreExecutor {
         where F: Fn(&Handle) + Send + 'static
     {
         self.inner.remote.spawn(move |handle| {
-            fixed_rate_loop(Arc::new(scheduled_fn), interval, handle, Duration::from_secs(0));
+            fixed_rate_loop(scheduled_fn, interval, handle, Duration::from_secs(0));
             Ok::<(), ()>(())
         });
     }
 }
 
+
+pub struct ThreadPoolExecutor {
+    executor: CoreExecutor,
+    pool: CpuPool
+}
+
+impl ThreadPoolExecutor {
+    pub fn new(threads: usize, prefix: &str) -> Result<ThreadPoolExecutor, io::Error> {
+        let new_executor = CoreExecutor::with_name(&format!("{}executor", prefix))?;
+        Ok(ThreadPoolExecutor::with_executor(threads, prefix, new_executor))
+    }
+
+    pub fn with_executor(threads: usize, prefix: &str, executor: CoreExecutor) -> ThreadPoolExecutor {
+        let pool = Builder::new()
+            .pool_size(threads)
+            .name_prefix(prefix)
+            .create();
+        ThreadPoolExecutor { pool, executor }
+    }
+
+    pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
+        where F: Fn() + Send + Sync + 'static
+    {
+        let pool_clone = self.pool.clone();
+        let arc_fn = Arc::new(scheduled_fn);
+        self.executor.schedule_fixed_rate(interval, move |handle| {
+            let arc_fn_clone = arc_fn.clone();
+            let t = pool_clone.spawn_fn(move || {
+                arc_fn_clone();
+                Ok::<(),()>(())
+            });
+            handle.spawn(t);
+        });
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -145,7 +179,7 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    use super::{CoreExecutor, calculate_delay};
+    use super::{CoreExecutor, ThreadPoolExecutor, calculate_delay};
 
     #[test]
     fn fixed_interval_test() {
@@ -175,9 +209,13 @@ mod tests {
         {
             let executor = CoreExecutor::new().unwrap();
             executor.schedule_fixed_interval(Duration::from_secs(1), move |_handle| {
-                let mut counter = counter_clone.write().unwrap();
-                (*counter) += 1;
-                if *counter == 1 {
+                // TODO: use atomic int when available
+                let counter = {
+                    let mut counter = counter_clone.write().unwrap();
+                    (*counter) += 1;
+                    *counter
+                };
+                if counter == 1 {
                     thread::sleep(Duration::from_secs(3));
                 }
             });
@@ -218,9 +256,35 @@ mod tests {
         {
             let executor = CoreExecutor::new().unwrap();
             executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-                let mut counter = counter_clone.write().unwrap();
-                (*counter) += 1;
-                if *counter == 1 {
+                // TODO: use atomic int when available
+                let counter = {
+                    let mut counter = counter_clone.write().unwrap();
+                    (*counter) += 1;
+                    *counter
+                };
+                if counter == 1 {
+                    thread::sleep(Duration::from_secs(3));
+                }
+            });
+            thread::sleep(Duration::from_millis(5500));
+        }
+        assert_eq!(*counter.read().unwrap(), 6);
+    }
+
+    #[test]
+    fn fixed_rate_slow_task_test_pool() {
+        let counter = Arc::new(RwLock::new(0));
+        let counter_clone = Arc::clone(&counter);
+        {
+            let executor = ThreadPoolExecutor::new(20, "pool-").unwrap();
+            executor.schedule_fixed_rate(Duration::from_secs(1), move || {
+                // TODO: use atomic int when available
+                let counter = {
+                    let mut counter = counter_clone.write().unwrap();
+                    (*counter) += 1;
+                    *counter
+                };
+                if counter == 1 {
                     thread::sleep(Duration::from_secs(3));
                 }
             });
