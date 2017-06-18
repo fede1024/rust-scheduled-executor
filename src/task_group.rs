@@ -58,28 +58,36 @@ fn schedule_tasks_remote<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, 
 }
 
 pub trait TaskGroupScheduler {
-    fn schedule<T: TaskGroup>(&self, T, Duration) -> Arc<T>;
+    fn schedule<T: TaskGroup>(&self, task_group: T, initial: Duration, interval: Duration) -> Arc<T>;
 }
 
 impl TaskGroupScheduler for CoreExecutor {
-    fn schedule<T: TaskGroup>(&self, task_group: T, interval: Duration) -> Arc<T> {
+    fn schedule<T: TaskGroup>(&self, task_group: T, initial: Duration, interval: Duration) -> Arc<T> {
         let task_group = Arc::new(task_group);
         let task_group_clone = task_group.clone();
-        self.schedule_fixed_rate(interval, move |handle| {
-            schedule_tasks_local(&task_group_clone, interval, handle);
-        });
+        self.schedule_fixed_rate(
+            initial,
+            interval,
+            move |handle| {
+                schedule_tasks_local(&task_group_clone, interval, handle);
+            }
+        );
         task_group
     }
 }
 
 impl TaskGroupScheduler for ThreadPoolExecutor {
-    fn schedule<T: TaskGroup>(&self, task_group: T, interval: Duration) -> Arc<T> {
+    fn schedule<T: TaskGroup>(&self, task_group: T, initial: Duration, interval: Duration) -> Arc<T> {
         let task_group = Arc::new(task_group);
         let task_group_clone = task_group.clone();
         let pool = self.pool().clone();
-        self.schedule_fixed_rate(interval, move |remote| {
-            schedule_tasks_remote(&task_group_clone, interval, remote, &pool);
-        });
+        self.schedule_fixed_rate(
+            initial,
+            interval,
+            move |remote| {
+                schedule_tasks_remote(&task_group_clone, interval, remote, &pool);
+            }
+        );
         task_group
     }
 }
@@ -133,7 +141,7 @@ mod tests {
         let executions_lock = group.executions_lock();
         {
             let executor = ThreadPoolExecutor::new(4, "pool-thread-").unwrap();
-            executor.schedule(group, Duration::from_secs(4));
+            executor.schedule(group, Duration::from_secs(0), Duration::from_secs(4));
             thread::sleep(Duration::from_millis(11800));
         }
 

@@ -118,20 +118,32 @@ impl CoreExecutor {
         Ok(executor)
     }
 
-    pub fn schedule_fixed_interval<F>(&self, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_interval<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
         self.inner.remote.spawn(move |handle| {
-            fixed_interval_loop(scheduled_fn, interval, handle);
+            let handle_clone = handle.clone();
+            let t = Timeout::new(initial, handle).unwrap()
+                .then(move |_| {
+                    fixed_interval_loop(scheduled_fn, interval, &handle_clone);
+                    Ok::<(), ()>(())
+                });
+            handle.spawn(t);
             Ok::<(), ()>(())
         });
     }
 
-    pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
         self.inner.remote.spawn(move |handle| {
-            fixed_rate_loop(scheduled_fn, interval, handle, Duration::from_secs(0));
+            let handle_clone = handle.clone();
+            let t = Timeout::new(initial, handle).unwrap()
+                .then(move |_| {
+                    fixed_rate_loop(scheduled_fn, interval, &handle_clone, Duration::from_secs(0));
+                    Ok::<(), ()>(())
+                });
+            handle.spawn(t);
             Ok::<(), ()>(())
         });
     }
@@ -158,20 +170,24 @@ impl ThreadPoolExecutor {
         ThreadPoolExecutor { pool, executor }
     }
 
-    pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Remote) + Send + Sync + 'static
     {
         let pool_clone = self.pool.clone();
         let arc_fn = Arc::new(scheduled_fn);
-        self.executor.schedule_fixed_rate(interval, move |handle| {
-            let arc_fn_clone = arc_fn.clone();
-            let remote = handle.remote().clone();
-            let t = pool_clone.spawn_fn(move || {
-                arc_fn_clone(&remote);
-                Ok::<(),()>(())
-            });
-            handle.spawn(t);
-        });
+        self.executor.schedule_fixed_rate(
+            initial,
+            interval,
+            move |handle| {
+                let arc_fn_clone = arc_fn.clone();
+                let remote = handle.remote().clone();
+                let t = pool_clone.spawn_fn(move || {
+                    arc_fn_clone(&remote);
+                    Ok::<(),()>(())
+                });
+                handle.spawn(t);
+            }
+        );
     }
 
     // TODO: make pub(crate)
@@ -194,9 +210,13 @@ mod tests {
         {
             let executor = CoreExecutor::new().unwrap();
             let timings_clone = Arc::clone(&timings);
-            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-                timings_clone.write().unwrap().push(Instant::now());
-            });
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    timings_clone.write().unwrap().push(Instant::now());
+                }
+            );
             thread::sleep(Duration::from_millis(5500));
         }
 
@@ -215,17 +235,21 @@ mod tests {
         let counter_clone = Arc::clone(&counter);
         {
             let executor = CoreExecutor::new().unwrap();
-            executor.schedule_fixed_interval(Duration::from_secs(1), move |_handle| {
-                // TODO: use atomic int when available
-                let counter = {
-                    let mut counter = counter_clone.write().unwrap();
-                    (*counter) += 1;
-                    *counter
-                };
-                if counter == 1 {
-                    thread::sleep(Duration::from_secs(3));
+            executor.schedule_fixed_interval(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    // TODO: use atomic int when available
+                    let counter = {
+                        let mut counter = counter_clone.write().unwrap();
+                        (*counter) += 1;
+                        *counter
+                    };
+                    if counter == 1 {
+                        thread::sleep(Duration::from_secs(3));
+                    }
                 }
-            });
+            );
             thread::sleep(Duration::from_millis(5500));
         }
         assert_eq!(*counter.read().unwrap(), 4);
@@ -247,10 +271,14 @@ mod tests {
         let counter_clone = Arc::clone(&counter);
         {
             let executor = CoreExecutor::new().unwrap();
-            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-                let mut counter = counter_clone.write().unwrap();
-                (*counter) += 1;
-            });
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    let mut counter = counter_clone.write().unwrap();
+                    (*counter) += 1;
+                }
+            );
             thread::sleep(Duration::from_millis(5500));
         }
         assert_eq!(*counter.read().unwrap(), 6);
@@ -262,17 +290,21 @@ mod tests {
         let counter_clone = Arc::clone(&counter);
         {
             let executor = CoreExecutor::new().unwrap();
-            executor.schedule_fixed_rate(Duration::from_secs(1), move |_handle| {
-                // TODO: use atomic int when available
-                let counter = {
-                    let mut counter = counter_clone.write().unwrap();
-                    (*counter) += 1;
-                    *counter
-                };
-                if counter == 1 {
-                    thread::sleep(Duration::from_secs(3));
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    // TODO: use atomic int when available
+                    let counter = {
+                        let mut counter = counter_clone.write().unwrap();
+                        (*counter) += 1;
+                        *counter
+                    };
+                    if counter == 1 {
+                        thread::sleep(Duration::from_secs(3));
+                    }
                 }
-            });
+            );
             thread::sleep(Duration::from_millis(5500));
         }
         assert_eq!(*counter.read().unwrap(), 6);
@@ -284,17 +316,21 @@ mod tests {
         let counter_clone = Arc::clone(&counter);
         {
             let executor = ThreadPoolExecutor::new(20, "pool-").unwrap();
-            executor.schedule_fixed_rate(Duration::from_secs(1), move |_remote| {
-                // TODO: use atomic int when available
-                let counter = {
-                    let mut counter = counter_clone.write().unwrap();
-                    (*counter) += 1;
-                    *counter
-                };
-                if counter == 1 {
-                    thread::sleep(Duration::from_secs(3));
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_remote| {
+                    // TODO: use atomic int when available
+                    let counter = {
+                        let mut counter = counter_clone.write().unwrap();
+                        (*counter) += 1;
+                        *counter
+                    };
+                    if counter == 1 {
+                        thread::sleep(Duration::from_secs(3));
+                    }
                 }
-            });
+            );
             thread::sleep(Duration::from_millis(5500));
         }
         assert_eq!(*counter.read().unwrap(), 6);
