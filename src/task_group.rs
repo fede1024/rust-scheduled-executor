@@ -1,9 +1,8 @@
 use futures::future::Future;
 use futures_cpupool::CpuPool;
-use tokio_core::reactor::Handle;
-use tokio_core::reactor::Timeout;
+use tokio_core::reactor::{Handle, Remote, Timeout};
 
-use executor::CoreExecutor;
+use executor::{CoreExecutor, ThreadPoolExecutor};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,58 +13,87 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
     fn get_tasks(&self) -> Vec<Self::TaskId>;
 
     fn execute(&self, Self::TaskId, Option<Handle>);
+}
 
-    fn schedule(self, interval: Duration, executor: &CoreExecutor, cpu_pool: Option<CpuPool>) -> Arc<Self> {
-        let task_group = Arc::new(self);
+fn schedule_tasks_local<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, handle: &Handle) {
+    let tasks = task_group.get_tasks();
+    if tasks.len() == 0 {
+        return
+    }
+    let task_interval = interval / tasks.len() as u32;
+    for (i, task) in tasks.into_iter().enumerate() {
         let task_group_clone = task_group.clone();
-        executor.schedule_fixed_interval(interval, move |handle| {
-            Self::schedule_tasks(&task_group_clone, interval, handle, &cpu_pool);
+        let handle_clone = handle.clone();
+        let t = Timeout::new(task_interval * i as u32, handle).unwrap()
+            .then(move |_| {
+                task_group_clone.execute(task, Some(handle_clone));
+                Ok::<(), ()>(())
+            });
+        handle.spawn(t);
+    }
+}
+
+fn schedule_tasks_remote<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, remote: &Remote, pool: &CpuPool) {
+    let tasks = task_group.get_tasks();
+    if tasks.len() == 0 {
+        return
+    }
+    let task_interval = interval / tasks.len() as u32;
+    for (i, task) in tasks.into_iter().enumerate() {
+        let task_group = task_group.clone();
+        let pool = pool.clone();
+
+        remote.spawn(move |handle| {
+            let task_group = task_group.clone();
+            let pool = pool.clone();
+            let t = Timeout::new(task_interval * i as u32, handle).unwrap()
+                .then(move |_| {
+                    task_group.execute(task, None);
+                    Ok::<(), ()>(())
+                });
+            handle.spawn(pool.spawn(t));
+            Ok::<(), ()>(())
+        })
+    }
+}
+
+pub trait TaskGroupScheduler {
+    fn schedule<T: TaskGroup>(&self, T, Duration) -> Arc<T>;
+}
+
+impl TaskGroupScheduler for CoreExecutor {
+    fn schedule<T: TaskGroup>(&self, task_group: T, interval: Duration) -> Arc<T> {
+        let task_group = Arc::new(task_group);
+        let task_group_clone = task_group.clone();
+        self.schedule_fixed_rate(interval, move |handle| {
+            schedule_tasks_local(&task_group_clone, interval, handle);
         });
         task_group
     }
+}
 
-    fn schedule_tasks(task_group: &Arc<Self>, interval: Duration, handle: &Handle, pool: &Option<CpuPool>) {
-        let tasks = task_group.get_tasks();
-        if tasks.is_empty() {
-            return
-        }
-        let task_interval = interval / tasks.len() as u32;
-        for (i, task) in tasks.into_iter().enumerate() {
-            let task_group_clone = task_group.clone();
-
-            match pool {
-                &Some(ref cpu_pool) => {
-                    let t = Timeout::new(task_interval * i as u32, handle).unwrap()
-                        .then(move |_| {
-                            task_group_clone.execute(task, None);
-                            Ok::<(), ()>(())
-                        });
-                    handle.spawn(cpu_pool.spawn(t));
-                }
-                &None => {
-                    let handle_clone = handle.clone();
-                    let t = Timeout::new(task_interval * i as u32, handle).unwrap()
-                        .then(move |_| {
-                            task_group_clone.execute(task, Some(handle_clone));
-                            Ok::<(), ()>(())
-                        });
-                    handle.spawn(t);
-                }
-            }
-        }
+impl TaskGroupScheduler for ThreadPoolExecutor {
+    fn schedule<T: TaskGroup>(&self, task_group: T, interval: Duration) -> Arc<T> {
+        let task_group = Arc::new(task_group);
+        let task_group_clone = task_group.clone();
+        let pool = self.pool().clone();
+        self.schedule_fixed_rate(interval, move |remote| {
+            schedule_tasks_remote(&task_group_clone, interval, remote, &pool);
+        });
+        task_group
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use tokio_core::reactor::Handle;
+
     use std::thread;
     use std::time::{Duration, Instant};
     use std::sync::{Arc, RwLock};
-    use tokio_core::reactor::Handle;
-    use futures_cpupool::Builder;
-    use task_group::TaskGroup;
 
-    use CoreExecutor;
+    use task_group::{TaskGroup, TaskGroupScheduler};
+    use executor::ThreadPoolExecutor;
 
     type TaskExecutions = Vec<Vec<Instant>>;
     struct TestGroup {
@@ -104,9 +132,8 @@ mod tests {
         let group = TestGroup::new();
         let executions_lock = group.executions_lock();
         {
-            let executor = CoreExecutor::new().unwrap();
-            let cpu_pool = Builder::new().name_prefix("pool-thread-").pool_size(4).create();
-            group.schedule(Duration::from_secs(4), &executor, Some(cpu_pool));
+            let executor = ThreadPoolExecutor::new(4, "pool-thread-").unwrap();
+            executor.schedule(group, Duration::from_secs(4));
             thread::sleep(Duration::from_millis(11800));
         }
 

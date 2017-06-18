@@ -158,18 +158,24 @@ impl ThreadPoolExecutor {
     }
 
     pub fn schedule_fixed_rate<F>(&self, interval: Duration, scheduled_fn: F)
-        where F: Fn() + Send + Sync + 'static
+        where F: Fn(&Remote) + Send + Sync + 'static
     {
         let pool_clone = self.pool.clone();
         let arc_fn = Arc::new(scheduled_fn);
         self.executor.schedule_fixed_rate(interval, move |handle| {
             let arc_fn_clone = arc_fn.clone();
+            let remote = handle.remote().clone();
             let t = pool_clone.spawn_fn(move || {
-                arc_fn_clone();
+                arc_fn_clone(&remote);
                 Ok::<(),()>(())
             });
             handle.spawn(t);
         });
+    }
+
+    // TODO: make pub(crate)
+    pub fn pool(&self) -> &CpuPool {
+        &self.pool
     }
 }
 
@@ -277,7 +283,7 @@ mod tests {
         let counter_clone = Arc::clone(&counter);
         {
             let executor = ThreadPoolExecutor::new(20, "pool-").unwrap();
-            executor.schedule_fixed_rate(Duration::from_secs(1), move || {
+            executor.schedule_fixed_rate(Duration::from_secs(1), move |_remote| {
                 // TODO: use atomic int when available
                 let counter = {
                     let mut counter = counter_clone.write().unwrap();
