@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `scheduled_executor` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, scheduled_executor">
+
+    <title>scheduled_executor - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../normalize.css">
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc mod">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'>Crate scheduled_executor</p><div class="block items"><ul><li><a href="#reexports">Reexports</a></li><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'scheduled_executor', ty: 'mod', relpath: '../'};</script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content">
+<h1 class='fqn'><span class='in-band'>Crate <a class="mod" href=''>scheduled_executor</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-21' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'>
+<h2 id='the-library' class='section-header'><a href='#the-library'>The library</a></h2>
+<p>This library provides a series of utilities for scheduling and executing tasks.
+Tasks can be executed at fixed interval or at fixed rates, and can be executed in the main
+executor thread or using a thread pool.</p>
+
+<h3 id='documentation' class='section-header'><a href='#documentation'>Documentation</a></h3>
+<ul>
+<li><a href="https://fede1024.github.io/rust-scheduled-executor/">Current master branch</a></li>
+</ul>
+</div><h2 id='reexports' class='section-header'><a href="#reexports">Reexports</a></h2>
+<table><tr><td><code>pub use executor::<a class="struct" href="../scheduled_executor/executor/struct.CoreExecutor.html" title="struct scheduled_executor::executor::CoreExecutor">CoreExecutor</a>;</code></td></tr><tr><td><code>pub use executor::<a class="struct" href="../scheduled_executor/executor/struct.ThreadPoolExecutor.html" title="struct scheduled_executor::executor::ThreadPoolExecutor">ThreadPoolExecutor</a>;</code></td></tr><tr><td><code>pub use task_group::<a class="trait" href="../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskGroup</a>;</code></td></tr><tr><td><code>pub use task_group::<a class="trait" href="../scheduled_executor/task_group/trait.TaskGroupScheduler.html" title="trait scheduled_executor::task_group::TaskGroupScheduler">TaskGroupScheduler</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="executor/index.html"
+                                  title='mod scheduled_executor::executor'>executor</a></td>
+                           <td class='docblock-short'>
+                                <p>Executors are utilities that allow easy scheduling and execution of functions or closures.
+The <code>CoreExecutor</code> will use a single thread for scheduling and execution, while the
+<code>ThreadPoolExecutor</code> will use a thread for scheduling, but multiple threads for the execution
+of the function.
+Internally, each executor uses a <code>tokio_core::reactor::Core</code> as event loop, that will drive
+the scheduling of the functions (and for the <code>CoreExecutor</code>, also their execution). A reference
+to the event loop is passed to every closure when executed, allowing it to register additional
+events if needed.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="mod" href="task_group/index.html"
+                                  title='mod scheduled_executor::task_group'>task_group</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Handle.html"
+                                  title='struct scheduled_executor::Handle'>Handle</a></td>
+                           <td class='docblock-short'>
+                                <p>A non-sendable handle to an event loop, useful for manufacturing instances
+of <code>LoopData</code>.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class="struct" href="struct.Remote.html"
+                                  title='struct scheduled_executor::Remote'>Remote</a></td>
+                           <td class='docblock-short'>
+                                <p>Handle to an event loop, used to construct I/O objects, send messages, and
+otherwise interact indirectly with the event loop itself.</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "scheduled_executor";
+    </script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>
