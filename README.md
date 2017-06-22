@@ -27,7 +27,7 @@ running tasks.
 
 Scheduling periodic task is very simple. Here is an example using a thread pool:
 
-```rust
+```rust,ignore
 // Starts a new thread-pool based executor with 4 threads
 let executor = ThreadPoolExecutor::new(4)?;
 

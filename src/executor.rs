@@ -336,7 +336,7 @@ mod tests {
         let counter = Arc::new(RwLock::new(0));
         let counter_clone = Arc::clone(&counter);
         {
-            let executor = ThreadPoolExecutor::new(20, "pool-").unwrap();
+            let executor = ThreadPoolExecutor::new(20).unwrap();
             executor.schedule_fixed_rate(
                 Duration::from_secs(0),
                 Duration::from_secs(1),

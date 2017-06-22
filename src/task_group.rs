@@ -140,7 +140,7 @@ mod tests {
         let group = TestGroup::new();
         let executions_lock = group.executions_lock();
         {
-            let executor = ThreadPoolExecutor::new(4, "pool-thread-").unwrap();
+            let executor = ThreadPoolExecutor::new(4).unwrap();
             executor.schedule(group, Duration::from_secs(0), Duration::from_secs(4));
             thread::sleep(Duration::from_millis(11800));
         }
