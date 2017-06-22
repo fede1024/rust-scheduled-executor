@@ -1,0 +1,5 @@
+# scheduled-executor
+
+A simple function scheduler.
+
+__INCLUDE_RUST_DOC__$src/lib.rs$## The library

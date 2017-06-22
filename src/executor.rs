@@ -1,13 +1,21 @@
+//! Executors are utilities that allow easy scheduling and execution of functions or closures.
+//! The `CoreExecutor` will use a single thread for scheduling and execution, while the
+//! `ThreadPoolExecutor` will use a thread for scheduling, but multiple threads for the execution
+//! of the function.
+//! Internally, each executor uses a `tokio_core::reactor::Core` as event loop, that will drive
+//! the scheduling of the functions (and for the `CoreExecutor`, also their execution). A reference
+//! to the event loop is passed to every closure when executed, allowing it to register additional
+//! events if needed.
 use futures::future::Future;
 use futures::sync::oneshot::{channel, Sender};
 use futures_cpupool::{Builder, CpuPool};
-use tokio_core::reactor::{Core, Handle, Remote};
 use tokio_core::reactor::Timeout;
+use tokio_core::reactor::{Core, Handle, Remote};
 
+use std::io;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Instant, Duration};
-use std::io;
 
 
 fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle)
@@ -77,6 +85,10 @@ impl Drop for CoreExecutorInner {
     }
 }
 
+/// A `CoreExecutor` is the most simple executor provided. It runs a single thread, which is
+/// responsible for both scheduling the closure (registering the timer for the wakeup), and
+/// the actual execution of the closure. The executor will stop once dropped. The `CoreExecutor`
+/// can be cloned to generate a new reference to the same underlying executor.
 pub struct CoreExecutor {
     inner: Arc<CoreExecutorInner>
 }
@@ -88,10 +100,12 @@ impl Clone for CoreExecutor {
 }
 
 impl CoreExecutor {
+    /// Creates a new `CoreExecutor`.
     pub fn new() -> Result<CoreExecutor, io::Error> {
         CoreExecutor::with_name("core_executor")
     }
 
+    /// Creates a new `CoreExecutor` with the specified thread name.
     pub fn with_name(thread_name: &str) -> Result<CoreExecutor, io::Error> {
         let (termination_tx, termination_rx) = channel();
         let (core_tx, core_rx) = channel();
@@ -118,6 +132,9 @@ impl CoreExecutor {
         Ok(executor)
     }
 
+    /// Schedule a function for running at fixed intervals. The executor will try to run the
+    /// function every `interval`, but if one execution takes longer than `interval` it will delay
+    /// all the subsequent calls.
     pub fn schedule_fixed_interval<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
