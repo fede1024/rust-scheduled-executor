@@ -357,7 +357,7 @@
         <span class="kw">let</span> <span class="ident">group</span> <span class="op">=</span> <span class="ident">TestGroup</span>::<span class="ident">new</span>();
         <span class="kw">let</span> <span class="ident">executions_lock</span> <span class="op">=</span> <span class="ident">group</span>.<span class="ident">executions_lock</span>();
         {
-            <span class="kw">let</span> <span class="ident">executor</span> <span class="op">=</span> <span class="ident">ThreadPoolExecutor</span>::<span class="ident">new</span>(<span class="number">4</span>, <span class="string">&quot;pool-thread-&quot;</span>).<span class="ident">unwrap</span>();
+            <span class="kw">let</span> <span class="ident">executor</span> <span class="op">=</span> <span class="ident">ThreadPoolExecutor</span>::<span class="ident">new</span>(<span class="number">4</span>).<span class="ident">unwrap</span>();
             <span class="ident">executor</span>.<span class="ident">schedule</span>(<span class="ident">group</span>, <span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">0</span>), <span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">4</span>));
             <span class="ident">thread</span>::<span class="ident">sleep</span>(<span class="ident">Duration</span>::<span class="ident">from_millis</span>(<span class="number">11800</span>));
         }
