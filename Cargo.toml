@@ -1,7 +1,12 @@
 [package]
 name = "scheduled-executor"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Federico Giraud <giraud.federico@gmail.com>"]
+readme = "README.md"
+license = "MIT"
+description = "Single and multi-threaded task scheduler"
+keywords = ["executor", "scheduler"]
+categories = ["concurrency"]
 
 [dependencies]
 futures = "^0.1.14"

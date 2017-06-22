@@ -174,7 +174,11 @@ pub struct ThreadPoolExecutor {
 }
 
 impl ThreadPoolExecutor {
-    pub fn new(threads: usize, prefix: &str) -> Result<ThreadPoolExecutor, io::Error> {
+    pub fn new(threads: usize) -> Result<ThreadPoolExecutor, io::Error> {
+        ThreadPoolExecutor::with_prefix(threads, "pool_thread_")
+    }
+
+    pub fn with_prefix(threads: usize, prefix: &str) -> Result<ThreadPoolExecutor, io::Error> {
         let new_executor = CoreExecutor::with_name(&format!("{}executor", prefix))?;
         Ok(ThreadPoolExecutor::with_executor(threads, prefix, new_executor))
     }
