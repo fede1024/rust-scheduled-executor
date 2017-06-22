@@ -13,6 +13,7 @@
 //! ### Documentation
 //!
 //! - [Current master branch](https://fede1024.github.io/rust-scheduled-executor/)
+//! - [Latest release](https://docs.rs/scheduled-executor/)
 //!
 //! ### Examples
 //!

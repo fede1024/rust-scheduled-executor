@@ -1,5 +1,9 @@
 # scheduled-executor
 
+[![crates.io](https://img.shields.io/crates/v/scheduled-executor.svg)](https://crates.io/crates/scheduled-executor)
+[![docs.rs](https://docs.rs/scheduled-executor/badge.svg)](https://docs.rs/scheduled_executor/)
+[![Build Status](https://travis-ci.org/fede1024/rust-scheduled-executor.svg?branch=master)](https://travis-ci.org/fede1024/rust-scheduled-executor)
+
 A simple function scheduler.
 
 ## The library
@@ -17,6 +21,7 @@ running tasks.
 ### Documentation
 
 - [Current master branch](https://fede1024.github.io/rust-scheduled-executor/)
+- [Latest release](https://docs.rs/scheduled-executor/)
 
 ### Examples
 
