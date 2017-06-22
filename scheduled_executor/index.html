@@ -48,17 +48,41 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-21' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-46' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'>
 <h2 id='the-library' class='section-header'><a href='#the-library'>The library</a></h2>
 <p>This library provides a series of utilities for scheduling and executing tasks.
 Tasks can be executed at fixed interval or at fixed rates, and can be executed in the main
 executor thread or using a thread pool.</p>
 
+<h3 id='executors' class='section-header'><a href='#executors'>Executors</a></h3>
+<ul>
+<li><code>CoreExecutor</code>: schedule and execute tasks on a single thread, ideal for short running tasks.</li>
+<li><code>ThreadPoolExecutor</code>: schedule and execute tasks on a thread pool. Can be used for long
+running tasks.</li>
+</ul>
+
 <h3 id='documentation' class='section-header'><a href='#documentation'>Documentation</a></h3>
 <ul>
 <li><a href="https://fede1024.github.io/rust-scheduled-executor/">Current master branch</a></li>
 </ul>
+
+<h3 id='examples' class='section-header'><a href='#examples'>Examples</a></h3>
+<p>Scheduling periodic task is very simple. Here is an example using a thread pool:</p>
+
+<pre class="rust rust-example-rendered">
+<span class="comment">// Starts a new thread-pool based executor with 4 threads</span>
+<span class="kw">let</span> <span class="ident">executor</span> <span class="op">=</span> <span class="ident">ThreadPoolExecutor</span>::<span class="ident">new</span>(<span class="number">4</span>)<span class="question-mark">?</span>;
+
+<span class="ident">executor</span>.<span class="ident">schedule_fixed_rate</span>(
+    <span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">2</span>),  <span class="comment">// Wait 2 seconds before scheduling the first task</span>
+    <span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">5</span>),  <span class="comment">// and schedule every following task at 5 seconds intervals</span>
+    <span class="op">|</span><span class="ident">remote</span><span class="op">|</span> {
+        <span class="comment">// Code to be scheduled. The code will run on one of the threads in the thread pool.</span>
+        <span class="comment">// The `remote` handle can be used to schedule additional work on the event loop,</span>
+        <span class="comment">// if needed.</span>
+    },
+);</pre>
 </div><h2 id='reexports' class='section-header'><a href="#reexports">Reexports</a></h2>
 <table><tr><td><code>pub use executor::<a class="struct" href="../scheduled_executor/executor/struct.CoreExecutor.html" title="struct scheduled_executor::executor::CoreExecutor">CoreExecutor</a>;</code></td></tr><tr><td><code>pub use executor::<a class="struct" href="../scheduled_executor/executor/struct.ThreadPoolExecutor.html" title="struct scheduled_executor::executor::ThreadPoolExecutor">ThreadPoolExecutor</a>;</code></td></tr><tr><td><code>pub use task_group::<a class="trait" href="../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskGroup</a>;</code></td></tr><tr><td><code>pub use task_group::<a class="trait" href="../scheduled_executor/task_group/trait.TaskGroupScheduler.html" title="trait scheduled_executor::task_group::TaskGroupScheduler">TaskGroupScheduler</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
 <table>
