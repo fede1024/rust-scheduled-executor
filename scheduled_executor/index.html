@@ -29,7 +29,7 @@
 
     <nav class="sidebar">
         
-        <p class='location'>Crate scheduled_executor</p><div class="block items"><ul><li><a href="#reexports">Reexports</a></li><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'scheduled_executor', ty: 'mod', relpath: '../'};</script>
+        <p class='location'>Crate scheduled_executor</p><div class="block items"><ul><li><a href="#reexports">Reexports</a></li><li><a href="#modules">Modules</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'scheduled_executor', ty: 'mod', relpath: '../'};</script>
     </nav>
 
     <nav class="sub">
@@ -48,12 +48,12 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-47' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-49' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'>
 <h2 id='the-library' class='section-header'><a href='#the-library'>The library</a></h2>
-<p>This library provides a series of utilities for scheduling and executing tasks.
-Tasks can be executed at fixed interval or at fixed rates, and can be executed in the main
-executor thread or using a thread pool.</p>
+<p>This library provides a series of utilities for scheduling and executing tasks (functions and
+closures). Tasks can be executed at fixed interval or at fixed rates, and can be executed
+sequentially in the main executor thread or in parallel using a thread pool.</p>
 
 <h3 id='executors' class='section-header'><a href='#executors'>Executors</a></h3>
 <ul>
@@ -91,13 +91,12 @@ running tasks.</li>
                            <td><a class="mod" href="executor/index.html"
                                   title='mod scheduled_executor::executor'>executor</a></td>
                            <td class='docblock-short'>
-                                <p>Executors are utilities that allow easy scheduling and execution of functions or closures.
-The <code>CoreExecutor</code> will use a single thread for scheduling and execution, while the
-<code>ThreadPoolExecutor</code> will use a thread for scheduling, but multiple threads for the execution
-of the function.
+                                <p>Executors allow easy scheduling and execution of functions or closures.
+The <code>CoreExecutor</code> uses a single thread for scheduling and execution, while the
+<code>ThreadPoolExecutor</code> uses multiple threads to execute the function.
 Internally, each executor uses a <code>tokio_core::reactor::Core</code> as event loop, that will drive
 the scheduling of the functions (and for the <code>CoreExecutor</code>, also their execution). A reference
-to the event loop is passed to every closure when executed, allowing it to register additional
+to the event loop is passed to every function when executed, allowing it to register additional
 events if needed.</p>
                            </td>
                        </tr>
@@ -105,24 +104,8 @@ events if needed.</p>
                            <td><a class="mod" href="task_group/index.html"
                                   title='mod scheduled_executor::task_group'>task_group</a></td>
                            <td class='docblock-short'>
-                                
-                           </td>
-                       </tr></table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
-<table>
-                       <tr class=' module-item'>
-                           <td><a class="struct" href="struct.Handle.html"
-                                  title='struct scheduled_executor::Handle'>Handle</a></td>
-                           <td class='docblock-short'>
-                                <p>A non-sendable handle to an event loop, useful for manufacturing instances
-of <code>LoopData</code>.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class="struct" href="struct.Remote.html"
-                                  title='struct scheduled_executor::Remote'>Remote</a></td>
-                           <td class='docblock-short'>
-                                <p>Handle to an event loop, used to construct I/O objects, send messages, and
-otherwise interact indirectly with the event loop itself.</p>
+                                <p>Task groups can be used whenever there is a sequence of tasks that need to be executed at
+regular intervals, and the sequence can change across different cycles.</p>
                            </td>
                        </tr></table></section>
     <section id='search' class="content hidden"></section>

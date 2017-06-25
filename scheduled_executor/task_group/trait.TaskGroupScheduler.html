@@ -48,10 +48,11 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../../src/scheduled_executor/task_group.rs.html#60-62' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../../src/scheduled_executor/task_group.rs.html#76-78' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait TaskGroupScheduler {
     fn <a href='#tymethod.schedule' class='fnname'>schedule</a>&lt;T:&nbsp;<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskGroup</a>&gt;(<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&amp;self, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;task_group: T, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;initial: <a class="struct" href="https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html" title="struct std::time::duration::Duration">Duration</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;interval: <a class="struct" href="https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html" title="struct std::time::duration::Duration">Duration</a><br>&nbsp;&nbsp;&nbsp;&nbsp;) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html" title="struct alloc::arc::Arc">Arc</a>&lt;T&gt;;
-}</pre>
+}</pre><div class='docblock'><p>Allows the execution of a <code>TaskGroup</code>.</p>
+</div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
         <h3 id='tymethod.schedule' class='method'><span id='schedule.v' class='invisible'><code>fn <a href='#tymethod.schedule' class='fnname'>schedule</a>&lt;T:&nbsp;<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskGroup</a>&gt;(<br>&nbsp;&nbsp;&nbsp;&nbsp;&amp;self, <br>&nbsp;&nbsp;&nbsp;&nbsp;task_group: T, <br>&nbsp;&nbsp;&nbsp;&nbsp;initial: <a class="struct" href="https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html" title="struct std::time::duration::Duration">Duration</a>, <br>&nbsp;&nbsp;&nbsp;&nbsp;interval: <a class="struct" href="https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html" title="struct std::time::duration::Duration">Duration</a><br>) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html" title="struct alloc::arc::Arc">Arc</a>&lt;T&gt;</code></span></h3></div>

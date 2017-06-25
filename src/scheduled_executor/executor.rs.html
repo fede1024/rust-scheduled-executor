@@ -402,14 +402,29 @@
 <span id="357">357</span>
 <span id="358">358</span>
 <span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
 </pre><pre class="rust ">
-<span class="doccomment">//! Executors are utilities that allow easy scheduling and execution of functions or closures.</span>
-<span class="doccomment">//! The `CoreExecutor` will use a single thread for scheduling and execution, while the</span>
-<span class="doccomment">//! `ThreadPoolExecutor` will use a thread for scheduling, but multiple threads for the execution</span>
-<span class="doccomment">//! of the function.</span>
+<span class="doccomment">//! Executors allow easy scheduling and execution of functions or closures.</span>
+<span class="doccomment">//! The `CoreExecutor` uses a single thread for scheduling and execution, while the</span>
+<span class="doccomment">//! `ThreadPoolExecutor` uses multiple threads to execute the function.</span>
 <span class="doccomment">//! Internally, each executor uses a `tokio_core::reactor::Core` as event loop, that will drive</span>
 <span class="doccomment">//! the scheduling of the functions (and for the `CoreExecutor`, also their execution). A reference</span>
-<span class="doccomment">//! to the event loop is passed to every closure when executed, allowing it to register additional</span>
+<span class="doccomment">//! to the event loop is passed to every function when executed, allowing it to register additional</span>
 <span class="doccomment">//! events if needed.</span>
 <span class="kw">use</span> <span class="ident">futures</span>::<span class="ident">future</span>::<span class="ident">Future</span>;
 <span class="kw">use</span> <span class="ident">futures</span>::<span class="ident">sync</span>::<span class="ident">oneshot</span>::{<span class="ident">channel</span>, <span class="ident">Sender</span>};
@@ -491,9 +506,11 @@
 }
 
 <span class="doccomment">/// A `CoreExecutor` is the most simple executor provided. It runs a single thread, which is</span>
-<span class="doccomment">/// responsible for both scheduling the closure (registering the timer for the wakeup), and</span>
-<span class="doccomment">/// the actual execution of the closure. The executor will stop once dropped. The `CoreExecutor`</span>
+<span class="doccomment">/// responsible for both scheduling the function (registering the timer for the wakeup),</span>
+<span class="doccomment">/// and the actual execution. The executor will stop once dropped. The `CoreExecutor`</span>
 <span class="doccomment">/// can be cloned to generate a new reference to the same underlying executor.</span>
+<span class="doccomment">/// Given the single threaded nature of this executor, tasks are executed sequentially, and a long</span>
+<span class="doccomment">/// running task will cause delay in other subsequent executions.</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CoreExecutor</span> {
     <span class="ident">inner</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">CoreExecutorInner</span><span class="op">&gt;</span>
 }
@@ -555,6 +572,9 @@
         });
     }
 
+    <span class="doccomment">/// Schedule a function for running at fixed rate. The executor will try to run the function</span>
+    <span class="doccomment">/// every `interval`, and if a task execution takes longer than `interval`, the wait time</span>
+    <span class="doccomment">/// between task will be reduced to decrease the overall delay.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">schedule_fixed_rate</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">initial</span>: <span class="ident">Duration</span>, <span class="ident">interval</span>: <span class="ident">Duration</span>, <span class="ident">scheduled_fn</span>: <span class="ident">F</span>)
         <span class="kw">where</span> <span class="ident">F</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">Handle</span>) <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="lifetime">&#39;static</span>
     {
@@ -572,6 +592,8 @@
 }
 
 
+<span class="doccomment">/// A `ThreadPoolExecutor` will use one thread for the task scheduling and a thread pool for</span>
+<span class="doccomment">/// task execution, allowing multiple tasks to run in parallel.</span>
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">ThreadPoolExecutor</span> {
     <span class="ident">executor</span>: <span class="ident">CoreExecutor</span>,
@@ -579,15 +601,21 @@
 }
 
 <span class="kw">impl</span> <span class="ident">ThreadPoolExecutor</span> {
+    <span class="doccomment">/// Creates a new `ThreadPoolExecutor` with the specified number of threads. Threads will</span>
+    <span class="doccomment">/// be named &quot;pool_thread_0&quot;, &quot;pool_thread_1&quot; and so on.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">threads</span>: <span class="ident">usize</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">ThreadPoolExecutor</span>, <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span> {
         <span class="ident">ThreadPoolExecutor</span>::<span class="ident">with_prefix</span>(<span class="ident">threads</span>, <span class="string">&quot;pool_thread_&quot;</span>)
     }
 
+    <span class="doccomment">/// Creates a new `ThreadPoolExecutor` with the specified number of threads and prefix for</span>
+    <span class="doccomment">/// the thread names.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">with_prefix</span>(<span class="ident">threads</span>: <span class="ident">usize</span>, <span class="ident">prefix</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">ThreadPoolExecutor</span>, <span class="ident">io</span>::<span class="ident">Error</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">new_executor</span> <span class="op">=</span> <span class="ident">CoreExecutor</span>::<span class="ident">with_name</span>(<span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}executor&quot;</span>, <span class="ident">prefix</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">ThreadPoolExecutor</span>::<span class="ident">with_executor</span>(<span class="ident">threads</span>, <span class="ident">prefix</span>, <span class="ident">new_executor</span>))
     }
 
+    <span class="doccomment">/// Creates a new `ThreadPoolExecutor` with the specified number of threads, prefix and</span>
+    <span class="doccomment">/// using the given `CoreExecutor` for scheduling.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">with_executor</span>(<span class="ident">threads</span>: <span class="ident">usize</span>, <span class="ident">prefix</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">executor</span>: <span class="ident">CoreExecutor</span>) <span class="op">-&gt;</span> <span class="ident">ThreadPoolExecutor</span> {
         <span class="kw">let</span> <span class="ident">pool</span> <span class="op">=</span> <span class="ident">Builder</span>::<span class="ident">new</span>()
             .<span class="ident">pool_size</span>(<span class="ident">threads</span>)
@@ -596,12 +624,14 @@
         <span class="ident">ThreadPoolExecutor</span> { <span class="ident">pool</span>, <span class="ident">executor</span> }
     }
 
+    <span class="doccomment">/// Schedules the given function to be executed every `interval`. The function will be</span>
+    <span class="doccomment">/// scheduled on one of the threads in the thread pool.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">schedule_fixed_rate</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">initial</span>: <span class="ident">Duration</span>, <span class="ident">interval</span>: <span class="ident">Duration</span>, <span class="ident">scheduled_fn</span>: <span class="ident">F</span>)
         <span class="kw">where</span> <span class="ident">F</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">Remote</span>) <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span> <span class="op">+</span> <span class="lifetime">&#39;static</span>
     {
         <span class="kw">let</span> <span class="ident">pool_clone</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">pool</span>.<span class="ident">clone</span>();
         <span class="kw">let</span> <span class="ident">arc_fn</span> <span class="op">=</span> <span class="ident">Arc</span>::<span class="ident">new</span>(<span class="ident">scheduled_fn</span>);
-        <span class="self">self</span>.<span class="ident">executor</span>.<span class="ident">schedule_fixed_rate</span>(
+        <span class="self">self</span>.<span class="ident">executor</span>.<span class="ident">schedule_fixed_interval</span>(  <span class="comment">// Fixed interval is enough</span>
             <span class="ident">initial</span>,
             <span class="ident">interval</span>,
             <span class="kw">move</span> <span class="op">|</span><span class="ident">handle</span><span class="op">|</span> {
@@ -617,10 +647,12 @@
     }
 
     <span class="comment">// TODO: make pub(crate)</span>
+    <span class="doccomment">/// Returns the thread pool used internally.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">pool</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">CpuPool</span> {
         <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">pool</span>
     }
 }
+
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">mod</span> <span class="ident">tests</span> {

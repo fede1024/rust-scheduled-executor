@@ -48,14 +48,13 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../../src/scheduled_executor/executor.rs.html#1-359' title='goto source code'>[src]</a></span></h1>
-<div class='docblock'><p>Executors are utilities that allow easy scheduling and execution of functions or closures.
-The <code>CoreExecutor</code> will use a single thread for scheduling and execution, while the
-<code>ThreadPoolExecutor</code> will use a thread for scheduling, but multiple threads for the execution
-of the function.
+               </span><a class='srclink' href='../../src/scheduled_executor/executor.rs.html#1-375' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Executors allow easy scheduling and execution of functions or closures.
+The <code>CoreExecutor</code> uses a single thread for scheduling and execution, while the
+<code>ThreadPoolExecutor</code> uses multiple threads to execute the function.
 Internally, each executor uses a <code>tokio_core::reactor::Core</code> as event loop, that will drive
 the scheduling of the functions (and for the <code>CoreExecutor</code>, also their execution). A reference
-to the event loop is passed to every closure when executed, allowing it to register additional
+to the event loop is passed to every function when executed, allowing it to register additional
 events if needed.</p>
 </div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
@@ -64,16 +63,19 @@ events if needed.</p>
                                   title='struct scheduled_executor::executor::CoreExecutor'>CoreExecutor</a></td>
                            <td class='docblock-short'>
                                 <p>A <code>CoreExecutor</code> is the most simple executor provided. It runs a single thread, which is
-responsible for both scheduling the closure (registering the timer for the wakeup), and
-the actual execution of the closure. The executor will stop once dropped. The <code>CoreExecutor</code>
-can be cloned to generate a new reference to the same underlying executor.</p>
+responsible for both scheduling the function (registering the timer for the wakeup),
+and the actual execution. The executor will stop once dropped. The <code>CoreExecutor</code>
+can be cloned to generate a new reference to the same underlying executor.
+Given the single threaded nature of this executor, tasks are executed sequentially, and a long
+running task will cause delay in other subsequent executions.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
                            <td><a class="struct" href="struct.ThreadPoolExecutor.html"
                                   title='struct scheduled_executor::executor::ThreadPoolExecutor'>ThreadPoolExecutor</a></td>
                            <td class='docblock-short'>
-                                
+                                <p>A <code>ThreadPoolExecutor</code> will use one thread for the task scheduling and a thread pool for
+task execution, allowing multiple tasks to run in parallel.</p>
                            </td>
                        </tr></table></section>
     <section id='search' class="content hidden"></section>

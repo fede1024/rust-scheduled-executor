@@ -48,18 +48,26 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../../src/scheduled_executor/task_group.rs.html#10-16' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../../src/scheduled_executor/task_group.rs.html#24-32' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait TaskGroup: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a> + 'static {
     type <a href='#associatedtype.TaskId' class="type">TaskId</a>: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>;
     fn <a href='#tymethod.get_tasks' class='fnname'>get_tasks</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html" title="struct collections::vec::Vec">Vec</a>&lt;Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>&gt;;
-    fn <a href='#tymethod.execute' class='fnname'>execute</a>(&amp;self, _: Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>, _: <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="../../scheduled_executor/struct.Handle.html" title="struct scheduled_executor::Handle">Handle</a>&gt;);
-}</pre>
+    fn <a href='#tymethod.execute' class='fnname'>execute</a>(&amp;self, _: Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>);
+}</pre><div class='docblock'><p>Defines a group of tasks. Task groups allow you to schedule the execution of different tasks
+uniformly in a specific interval. The task discovery will be performed by <code>get_tasks</code> that will
+return a list of task ids. The returned task ids will be used by the <code>execute</code> function to
+run the specified task. <code>get_tasks</code> will be executed one per interval, while <code>execute</code> will
+be executed every <code>interval</code> / number of tasks.
+See also: example in the module documentation.</p>
+</div>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
         <h3 id='associatedtype.TaskId' class='method'><span id='TaskId.t' class='invisible'><code>type <a href='#associatedtype.TaskId' class="type">TaskId</a>: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a></code></span></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.get_tasks' class='method'><span id='get_tasks.v' class='invisible'><code>fn <a href='#tymethod.get_tasks' class='fnname'>get_tasks</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html" title="struct collections::vec::Vec">Vec</a>&lt;Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>&gt;</code></span></h3><h3 id='tymethod.execute' class='method'><span id='execute.v' class='invisible'><code>fn <a href='#tymethod.execute' class='fnname'>execute</a>(&amp;self, _: Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>, _: <a class="enum" href="https://doc.rust-lang.org/nightly/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="../../scheduled_executor/struct.Handle.html" title="struct scheduled_executor::Handle">Handle</a>&gt;)</code></span></h3></div>
+        <h3 id='tymethod.get_tasks' class='method'><span id='get_tasks.v' class='invisible'><code>fn <a href='#tymethod.get_tasks' class='fnname'>get_tasks</a>(&amp;self) -&gt; <a class="struct" href="https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html" title="struct collections::vec::Vec">Vec</a>&lt;Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>&gt;</code></span></h3><div class='docblock'><p>Runs at the beginning of each cycle and generates the list of task ids.</p>
+</div><h3 id='tymethod.execute' class='method'><span id='execute.v' class='invisible'><code>fn <a href='#tymethod.execute' class='fnname'>execute</a>(&amp;self, _: Self::<a class="trait" href="../../scheduled_executor/task_group/trait.TaskGroup.html" title="trait scheduled_executor::task_group::TaskGroup">TaskId</a>)</code></span></h3><div class='docblock'><p>Runs once per task id per cycle.</p>
+</div></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     </ul><script type="text/javascript" async
