@@ -6,8 +6,8 @@
 //!
 //! ### Executors
 //!
-//! - `CoreExecutor`: schedule and execute tasks on a single thread, ideal for short running tasks.
-//! - `ThreadPoolExecutor`: schedule and execute tasks on a thread pool. Can be used for long
+//! - [`CoreExecutor`]: schedule and execute tasks on a single thread, ideal for short running tasks.
+//! - [`ThreadPoolExecutor`]: schedule and execute tasks on a thread pool. Can be used for long
 //! running tasks.
 //!
 //! [`CoreExecutor`]: https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.CoreExecutor.html
