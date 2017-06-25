@@ -1,14 +1,17 @@
 //! ## The library
 //!
-//! This library provides a series of utilities for scheduling and executing tasks.
-//! Tasks can be executed at fixed interval or at fixed rates, and can be executed in the main
-//! executor thread or using a thread pool.
+//! This library provides a series of utilities for scheduling and executing tasks (functions and
+//! closures). Tasks can be executed at fixed interval or at fixed rates, and can be executed
+//! sequentially in the main executor thread or in parallel using a thread pool.
 //!
 //! ### Executors
 //!
 //! - `CoreExecutor`: schedule and execute tasks on a single thread, ideal for short running tasks.
 //! - `ThreadPoolExecutor`: schedule and execute tasks on a thread pool. Can be used for long
 //! running tasks.
+//!
+//! [`CoreExecutor`]: https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.CoreExecutor.html
+//! [`ThreadPoolExecutor`]: https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html
 //!
 //! ### Documentation
 //!
@@ -44,4 +47,3 @@ pub mod task_group;
 
 pub use executor::{CoreExecutor, ThreadPoolExecutor};
 pub use task_group::{TaskGroup, TaskGroupScheduler};
-pub use tokio_core::reactor::{Handle, Remote};

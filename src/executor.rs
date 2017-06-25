@@ -1,10 +1,9 @@
-//! Executors are utilities that allow easy scheduling and execution of functions or closures.
-//! The `CoreExecutor` will use a single thread for scheduling and execution, while the
-//! `ThreadPoolExecutor` will use a thread for scheduling, but multiple threads for the execution
-//! of the function.
+//! Executors allow easy scheduling and execution of functions or closures.
+//! The `CoreExecutor` uses a single thread for scheduling and execution, while the
+//! `ThreadPoolExecutor` uses multiple threads to execute the function.
 //! Internally, each executor uses a `tokio_core::reactor::Core` as event loop, that will drive
 //! the scheduling of the functions (and for the `CoreExecutor`, also their execution). A reference
-//! to the event loop is passed to every closure when executed, allowing it to register additional
+//! to the event loop is passed to every function when executed, allowing it to register additional
 //! events if needed.
 use futures::future::Future;
 use futures::sync::oneshot::{channel, Sender};
@@ -86,9 +85,11 @@ impl Drop for CoreExecutorInner {
 }
 
 /// A `CoreExecutor` is the most simple executor provided. It runs a single thread, which is
-/// responsible for both scheduling the closure (registering the timer for the wakeup), and
-/// the actual execution of the closure. The executor will stop once dropped. The `CoreExecutor`
+/// responsible for both scheduling the function (registering the timer for the wakeup),
+/// and the actual execution. The executor will stop once dropped. The `CoreExecutor`
 /// can be cloned to generate a new reference to the same underlying executor.
+/// Given the single threaded nature of this executor, tasks are executed sequentially, and a long
+/// running task will cause delay in other subsequent executions.
 pub struct CoreExecutor {
     inner: Arc<CoreExecutorInner>
 }
@@ -150,6 +151,9 @@ impl CoreExecutor {
         });
     }
 
+    /// Schedule a function for running at fixed rate. The executor will try to run the function
+    /// every `interval`, and if a task execution takes longer than `interval`, the wait time
+    /// between task will be reduced to decrease the overall delay.
     pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Handle) + Send + 'static
     {
@@ -167,6 +171,8 @@ impl CoreExecutor {
 }
 
 
+/// A `ThreadPoolExecutor` will use one thread for the task scheduling and a thread pool for
+/// task execution, allowing multiple tasks to run in parallel.
 #[derive(Clone)]
 pub struct ThreadPoolExecutor {
     executor: CoreExecutor,
@@ -174,15 +180,21 @@ pub struct ThreadPoolExecutor {
 }
 
 impl ThreadPoolExecutor {
+    /// Creates a new `ThreadPoolExecutor` with the specified number of threads. Threads will
+    /// be named "pool_thread_0", "pool_thread_1" and so on.
     pub fn new(threads: usize) -> Result<ThreadPoolExecutor, io::Error> {
         ThreadPoolExecutor::with_prefix(threads, "pool_thread_")
     }
 
+    /// Creates a new `ThreadPoolExecutor` with the specified number of threads and prefix for
+    /// the thread names.
     pub fn with_prefix(threads: usize, prefix: &str) -> Result<ThreadPoolExecutor, io::Error> {
         let new_executor = CoreExecutor::with_name(&format!("{}executor", prefix))?;
         Ok(ThreadPoolExecutor::with_executor(threads, prefix, new_executor))
     }
 
+    /// Creates a new `ThreadPoolExecutor` with the specified number of threads, prefix and
+    /// using the given `CoreExecutor` for scheduling.
     pub fn with_executor(threads: usize, prefix: &str, executor: CoreExecutor) -> ThreadPoolExecutor {
         let pool = Builder::new()
             .pool_size(threads)
@@ -191,12 +203,14 @@ impl ThreadPoolExecutor {
         ThreadPoolExecutor { pool, executor }
     }
 
+    /// Schedules the given function to be executed every `interval`. The function will be
+    /// scheduled on one of the threads in the thread pool.
     pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
         where F: Fn(&Remote) + Send + Sync + 'static
     {
         let pool_clone = self.pool.clone();
         let arc_fn = Arc::new(scheduled_fn);
-        self.executor.schedule_fixed_rate(
+        self.executor.schedule_fixed_interval(  // Fixed interval is enough
             initial,
             interval,
             move |handle| {
@@ -212,10 +226,12 @@ impl ThreadPoolExecutor {
     }
 
     // TODO: make pub(crate)
+    /// Returns the thread pool used internally.
     pub fn pool(&self) -> &CpuPool {
         &self.pool
     }
 }
+
 
 #[cfg(test)]
 mod tests {

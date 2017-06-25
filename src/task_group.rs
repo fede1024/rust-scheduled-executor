@@ -1,3 +1,11 @@
+//! Task groups can be used whenever there is a sequence of tasks that need to be executed at
+//! regular intervals, and the sequence can change across different cycles.
+//!
+//! As an example lets suppose we have a list of servers that we want to healthcheck at regular
+//! intervals. First, we need to know the list of servers, and the list could change at any time,
+//! and once we have the list we need to schedule the health check. Refer to `task_group.rs` in
+//! the example folder to see how such a check could be scheduled.
+//!
 use futures::future::Future;
 use futures_cpupool::CpuPool;
 use tokio_core::reactor::{Handle, Remote, Timeout};
@@ -7,12 +15,20 @@ use executor::{CoreExecutor, ThreadPoolExecutor};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Defines a group of tasks. Task groups allow you to schedule the execution of different tasks
+/// uniformly in a specific interval. The task discovery will be performed by `get_tasks` that will
+/// return a list of task ids. The returned task ids will be used by the `execute` function to
+/// run the specified task. `get_tasks` will be executed one per interval, while `execute` will
+/// be executed every `interval` / number of tasks.
+/// See also: example in the module documentation.
 pub trait TaskGroup: Send + Sync + Sized + 'static {
     type TaskId: Send;
 
+    /// Runs at the beginning of each cycle and generates the list of task ids.
     fn get_tasks(&self) -> Vec<Self::TaskId>;
 
-    fn execute(&self, Self::TaskId, Option<Handle>);
+    /// Runs once per task id per cycle.
+    fn execute(&self, Self::TaskId);
 }
 
 fn schedule_tasks_local<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, handle: &Handle) {
@@ -23,10 +39,9 @@ fn schedule_tasks_local<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, h
     let task_interval = interval / tasks.len() as u32;
     for (i, task) in tasks.into_iter().enumerate() {
         let task_group_clone = task_group.clone();
-        let handle_clone = handle.clone();
         let t = Timeout::new(task_interval * i as u32, handle).unwrap()
             .then(move |_| {
-                task_group_clone.execute(task, Some(handle_clone));
+                task_group_clone.execute(task);
                 Ok::<(), ()>(())
             });
         handle.spawn(t);
@@ -48,7 +63,7 @@ fn schedule_tasks_remote<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, 
             let pool = pool.clone();
             let t = Timeout::new(task_interval * i as u32, handle).unwrap()
                 .then(move |_| {
-                    task_group.execute(task, None);
+                    task_group.execute(task);
                     Ok::<(), ()>(())
                 });
             handle.spawn(pool.spawn(t));
@@ -57,6 +72,7 @@ fn schedule_tasks_remote<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, 
     }
 }
 
+/// Allows the execution of a `TaskGroup`.
 pub trait TaskGroupScheduler {
     fn schedule<T: TaskGroup>(&self, task_group: T, initial: Duration, interval: Duration) -> Arc<T>;
 }
