@@ -110,11 +110,9 @@ impl TaskGroupScheduler for ThreadPoolExecutor {
 
 #[cfg(test)]
 mod tests {
-    use tokio_core::reactor::Handle;
-
+    use std::sync::{Arc, RwLock};
     use std::thread;
     use std::time::{Duration, Instant};
-    use std::sync::{Arc, RwLock};
 
     use task_group::{TaskGroup, TaskGroupScheduler};
     use executor::ThreadPoolExecutor;
@@ -144,10 +142,9 @@ mod tests {
             vec![0, 1, 2, 3, 4]
         }
 
-        fn execute(&self, task_id: usize, handle: Option<Handle>) {
+        fn execute(&self, task_id: usize) {
             let mut executions = self.executions_lock.write().unwrap();
             executions[task_id].push(Instant::now());
-            assert!(handle.is_none());
         }
     }
 
