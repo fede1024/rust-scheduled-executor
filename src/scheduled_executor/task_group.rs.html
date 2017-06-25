@@ -227,9 +227,6 @@
 <span id="182">182</span>
 <span id="183">183</span>
 <span id="184">184</span>
-<span id="185">185</span>
-<span id="186">186</span>
-<span id="187">187</span>
 </pre><pre class="rust ">
 <span class="doccomment">//! Task groups can be used whenever there is a sequence of tasks that need to be executed at</span>
 <span class="doccomment">//! regular intervals, and the sequence can change across different cycles.</span>
@@ -343,11 +340,9 @@
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">mod</span> <span class="ident">tests</span> {
-    <span class="kw">use</span> <span class="ident">tokio_core</span>::<span class="ident">reactor</span>::<span class="ident">Handle</span>;
-
+    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">sync</span>::{<span class="ident">Arc</span>, <span class="ident">RwLock</span>};
     <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">thread</span>;
     <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">time</span>::{<span class="ident">Duration</span>, <span class="ident">Instant</span>};
-    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">sync</span>::{<span class="ident">Arc</span>, <span class="ident">RwLock</span>};
 
     <span class="kw">use</span> <span class="ident">task_group</span>::{<span class="ident">TaskGroup</span>, <span class="ident">TaskGroupScheduler</span>};
     <span class="kw">use</span> <span class="ident">executor</span>::<span class="ident">ThreadPoolExecutor</span>;
@@ -377,10 +372,9 @@
             <span class="macro">vec</span><span class="macro">!</span>[<span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]
         }
 
-        <span class="kw">fn</span> <span class="ident">execute</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">task_id</span>: <span class="ident">usize</span>, <span class="ident">handle</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Handle</span><span class="op">&gt;</span>) {
+        <span class="kw">fn</span> <span class="ident">execute</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">task_id</span>: <span class="ident">usize</span>) {
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">executions</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">executions_lock</span>.<span class="ident">write</span>().<span class="ident">unwrap</span>();
             <span class="ident">executions</span>[<span class="ident">task_id</span>].<span class="ident">push</span>(<span class="ident">Instant</span>::<span class="ident">now</span>());
-            <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">handle</span>.<span class="ident">is_none</span>());
         }
     }
 

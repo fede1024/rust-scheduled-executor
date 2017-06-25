@@ -48,7 +48,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-49' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../src/scheduled_executor/lib.rs.html#1-60' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'>
 <h2 id='the-library' class='section-header'><a href='#the-library'>The library</a></h2>
 <p>This library provides a series of utilities for scheduling and executing tasks (functions and
@@ -61,6 +61,14 @@ sequentially in the main executor thread or in parallel using a thread pool.</p>
 <li><a href="https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html"><code>ThreadPoolExecutor</code></a>: schedule and execute tasks on a thread pool. Can be used for long
 running tasks.</li>
 </ul>
+
+<h3 id='task-group' class='section-header'><a href='#task-group'>Task group</a></h3>
+<p>The scheduled-executor crate also provides an abstraction for the execution of groups of tasks
+called <a href="https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html"><code>TaskGroup</code></a>. A TaskGroup requires a method for the generation of the tasks, which will
+be executed at the beginning of each cycle, and a method for the execution of they taks itself,
+which will be executed for each task.</p>
+
+<p>To see a task group in action, check out the <a href="https://github.com/fede1024/rust-scheduled-executor/blob/master/examples/task_group.rs">task_group.rs</a> example.</p>
 
 <h3 id='documentation' class='section-header'><a href='#documentation'>Documentation</a></h3>
 <ul>
