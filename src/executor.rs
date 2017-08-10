@@ -21,7 +21,7 @@ fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle)
     where F: Fn(&Handle) + Send + 'static
 {
     let start_time = Instant::now();
-    scheduled_fn(&handle);
+    scheduled_fn(handle);
     let execution = start_time.elapsed();
     let next_iter_wait = if execution >= interval {
         Duration::from_secs(0)
@@ -44,12 +44,10 @@ fn calculate_delay(interval: Duration, execution: Duration, delay: Duration) -> 
         let wait_gap = interval - execution;
         if delay == Duration::from_secs(0) {
             (wait_gap, Duration::from_secs(0))
+        } else if delay < wait_gap {
+            (wait_gap - delay, Duration::from_secs(0))
         } else {
-            if delay < wait_gap {
-                (wait_gap - delay, Duration::from_secs(0))
-            } else {
-                (Duration::from_secs(0), delay - wait_gap)
-            }
+            (Duration::from_secs(0), delay - wait_gap)
         }
     }
 }
@@ -58,7 +56,7 @@ fn fixed_rate_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, dela
     where F: Fn(&Handle) + Send + 'static
 {
     let start_time = Instant::now();
-    scheduled_fn(&handle);
+    scheduled_fn(handle);
     let execution = start_time.elapsed();
     let (next_iter_wait, updated_delay) = calculate_delay(interval, execution, delay);
     let handle_clone = handle.clone();

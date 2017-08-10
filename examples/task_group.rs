@@ -1,4 +1,4 @@
-//! Task groups are used for the periodic executions of different tasks. THe task groups is defined
+//! Task groups are used for the periodic executions of different tasks. The task groups is defined
 //! by a `get_task` function, which provides the list of task ids, and the `execute` method,
 //! which will receive the task id as argument.
 //!

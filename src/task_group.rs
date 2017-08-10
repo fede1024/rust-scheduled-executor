@@ -33,7 +33,7 @@ pub trait TaskGroup: Send + Sync + Sized + 'static {
 
 fn schedule_tasks_local<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, handle: &Handle) {
     let tasks = task_group.get_tasks();
-    if tasks.len() == 0 {
+    if tasks.is_empty() {
         return
     }
     let task_interval = interval / tasks.len() as u32;
@@ -50,7 +50,7 @@ fn schedule_tasks_local<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, h
 
 fn schedule_tasks_remote<T: TaskGroup>(task_group: &Arc<T>, interval: Duration, remote: &Remote, pool: &CpuPool) {
     let tasks = task_group.get_tasks();
-    if tasks.len() == 0 {
+    if tasks.is_empty() {
         return
     }
     let task_interval = interval / tasks.len() as u32;
