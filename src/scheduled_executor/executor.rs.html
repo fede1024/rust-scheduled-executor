@@ -552,13 +552,13 @@
         <span class="ident">TaskHandle</span> { <span class="ident">should_stop</span>: <span class="ident">Arc</span>::<span class="ident">new</span>(<span class="ident">AtomicBool</span>::<span class="ident">new</span>(<span class="bool-val">false</span>)) }
     }
 
-    <span class="comment">// Stops the correspondent task. Not that a running task won&#39;t be interrupted, but</span>
-    <span class="comment">// future tasks executions will be prevented.</span>
+    <span class="doccomment">/// Stops the correspondent task. Not that a running task won&#39;t be interrupted, but</span>
+    <span class="doccomment">/// future tasks executions will be prevented.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">stop</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
         <span class="self">self</span>.<span class="ident">should_stop</span>.<span class="ident">store</span>(<span class="bool-val">true</span>, <span class="ident">Ordering</span>::<span class="ident">Relaxed</span>);
     }
 
-    <span class="comment">// Returns true if the task is stopped.</span>
+    <span class="doccomment">/// Returns true if the task is stopped.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">stopped</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
         <span class="self">self</span>.<span class="ident">should_stop</span>.<span class="ident">load</span>(<span class="ident">Ordering</span>::<span class="ident">Relaxed</span>)
     }
