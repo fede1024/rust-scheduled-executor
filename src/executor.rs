@@ -13,13 +13,39 @@ use tokio_core::reactor::{Core, Handle, Remote};
 
 use std::io;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Instant, Duration};
 
 
-fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle)
+/// A handle that allows a task to be stopped. A new handle is returned every time a new task is
+/// scheduled. Note that stopping a task will prevent it from running the next time it's scheduled
+/// to run, but it won't interrupt a task that is currently being executed.
+#[derive(Clone)]
+pub struct TaskHandle {
+    should_stop: Arc<AtomicBool>,
+}
+
+impl TaskHandle {
+    fn new() -> TaskHandle {
+        TaskHandle { should_stop: Arc::new(AtomicBool::new(false)) }
+    }
+
+    pub fn stop(&self) {
+        self.should_stop.store(true, Ordering::Relaxed);
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.should_stop.load(Ordering::Relaxed)
+    }
+}
+
+fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, task_handle: TaskHandle)
     where F: Fn(&Handle) + Send + 'static
 {
+    if task_handle.stopped() {
+        return;
+    }
     let start_time = Instant::now();
     scheduled_fn(handle);
     let execution = start_time.elapsed();
@@ -31,7 +57,7 @@ fn fixed_interval_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle)
     let handle_clone = handle.clone();
     let t = Timeout::new(next_iter_wait, handle).unwrap()
         .then(move |_| {
-            fixed_interval_loop(scheduled_fn, interval, &handle_clone);
+            fixed_interval_loop(scheduled_fn, interval, &handle_clone, task_handle);
             Ok::<(), ()>(())
         });
     handle.spawn(t);
@@ -52,9 +78,12 @@ fn calculate_delay(interval: Duration, execution: Duration, delay: Duration) -> 
     }
 }
 
-fn fixed_rate_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, delay: Duration)
+fn fixed_rate_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, delay: Duration, task_handle: TaskHandle)
     where F: Fn(&Handle) + Send + 'static
 {
+    if task_handle.stopped() {
+        return;
+    }
     let start_time = Instant::now();
     scheduled_fn(handle);
     let execution = start_time.elapsed();
@@ -62,7 +91,7 @@ fn fixed_rate_loop<F>(scheduled_fn: F, interval: Duration, handle: &Handle, dela
     let handle_clone = handle.clone();
     let t = Timeout::new(next_iter_wait, handle).unwrap()
         .then(move |_| {
-            fixed_rate_loop(scheduled_fn, interval, &handle_clone, updated_delay);
+            fixed_rate_loop(scheduled_fn, interval, &handle_clone, updated_delay, task_handle);
             Ok::<(), ()>(())
         });
     handle.spawn(t);
@@ -134,37 +163,43 @@ impl CoreExecutor {
     /// Schedule a function for running at fixed intervals. The executor will try to run the
     /// function every `interval`, but if one execution takes longer than `interval` it will delay
     /// all the subsequent calls.
-    pub fn schedule_fixed_interval<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_interval<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F) -> TaskHandle
         where F: Fn(&Handle) + Send + 'static
     {
+        let task_handle = TaskHandle::new();
+        let task_handle_clone = task_handle.clone();
         self.inner.remote.spawn(move |handle| {
             let handle_clone = handle.clone();
             let t = Timeout::new(initial, handle).unwrap()
                 .then(move |_| {
-                    fixed_interval_loop(scheduled_fn, interval, &handle_clone);
+                    fixed_interval_loop(scheduled_fn, interval, &handle_clone, task_handle_clone);
                     Ok::<(), ()>(())
                 });
             handle.spawn(t);
             Ok::<(), ()>(())
         });
+        task_handle
     }
 
     /// Schedule a function for running at fixed rate. The executor will try to run the function
     /// every `interval`, and if a task execution takes longer than `interval`, the wait time
     /// between task will be reduced to decrease the overall delay.
-    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F) -> TaskHandle
         where F: Fn(&Handle) + Send + 'static
     {
+        let task_handle = TaskHandle::new();
+        let task_handle_clone = task_handle.clone();
         self.inner.remote.spawn(move |handle| {
             let handle_clone = handle.clone();
             let t = Timeout::new(initial, handle).unwrap()
                 .then(move |_| {
-                    fixed_rate_loop(scheduled_fn, interval, &handle_clone, Duration::from_secs(0));
+                    fixed_rate_loop(scheduled_fn, interval, &handle_clone, Duration::from_secs(0), task_handle_clone);
                     Ok::<(), ()>(())
                 });
             handle.spawn(t);
             Ok::<(), ()>(())
         });
+        task_handle
     }
 }
 
@@ -203,7 +238,7 @@ impl ThreadPoolExecutor {
 
     /// Schedules the given function to be executed every `interval`. The function will be
     /// scheduled on one of the threads in the thread pool.
-    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F)
+    pub fn schedule_fixed_rate<F>(&self, initial: Duration, interval: Duration, scheduled_fn: F) -> TaskHandle
         where F: Fn(&Remote) + Send + Sync + 'static
     {
         let pool_clone = self.pool.clone();
@@ -220,7 +255,7 @@ impl ThreadPoolExecutor {
                 });
                 handle.spawn(t);
             }
-        );
+        )
     }
 
     // TODO: make pub(crate)
@@ -256,7 +291,7 @@ mod tests {
         }
 
         let timings = timings.read().unwrap();
-        assert!(timings.len() == 6);
+        assert_eq!(timings.len(), 6);
         for i in 1..6 {
             let execution_interval = timings[i] - timings[i-1];
             assert!(execution_interval < Duration::from_millis(1020));
@@ -369,5 +404,69 @@ mod tests {
             thread::sleep(Duration::from_millis(5500));
         }
         assert_eq!(*counter.read().unwrap(), 6);
+    }
+
+    #[test]
+    fn fixed_rate_stop_test() {
+        let counter1 = Arc::new(RwLock::new(0));
+        let counter2 = Arc::new(RwLock::new(0));
+        let counter1_clone = Arc::clone(&counter1);
+        let counter2_clone = Arc::clone(&counter2);
+        {
+            let executor = CoreExecutor::new().unwrap();
+            let t1 = executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    let mut counter = counter1_clone.write().unwrap();
+                    (*counter) += 1;
+                }
+            );
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    let mut counter = counter2_clone.write().unwrap();
+                    (*counter) += 1;
+                }
+            );
+            thread::sleep(Duration::from_millis(5500));
+            t1.stop();
+            thread::sleep(Duration::from_millis(5000));
+        }
+        assert_eq!(*counter1.read().unwrap(), 6);
+        assert_eq!(*counter2.read().unwrap(), 11);
+    }
+
+    #[test]
+    fn fixed_interval_stop_test() {
+        let counter1 = Arc::new(RwLock::new(0));
+        let counter2 = Arc::new(RwLock::new(0));
+        let counter1_clone = Arc::clone(&counter1);
+        let counter2_clone = Arc::clone(&counter2);
+        {
+            let executor = CoreExecutor::new().unwrap();
+            let t1 = executor.schedule_fixed_interval(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    let mut counter = counter1_clone.write().unwrap();
+                    (*counter) += 1;
+                }
+            );
+            executor.schedule_fixed_rate(
+                Duration::from_secs(0),
+                Duration::from_secs(1),
+                move |_handle| {
+                    let mut counter = counter2_clone.write().unwrap();
+                    (*counter) += 1;
+                }
+            );
+            thread::sleep(Duration::from_millis(5500));
+            t1.stop();
+            thread::sleep(Duration::from_millis(5000));
+        }
+        assert_eq!(*counter1.read().unwrap(), 6);
+        assert_eq!(*counter2.read().unwrap(), 11);
     }
 }
