@@ -21,7 +21,7 @@
 //!
 //! To see a task group in action, check out the [`task_group.rs`] example.
 //!
-//! [`TaskGroup`]: https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html
+//! [`TaskGroup`]: https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/task_group/trait.TaskGroup.html
 //! [`task_group.rs`]: https://github.com/fede1024/rust-scheduled-executor/blob/master/examples/task_group.rs
 //!
 //! ### Documentation
