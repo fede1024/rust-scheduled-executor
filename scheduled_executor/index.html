@@ -64,11 +64,11 @@ running tasks.</li>
 
 <h3 id='task-group' class='section-header'><a href='#task-group'>Task group</a></h3>
 <p>The scheduled-executor crate also provides an abstraction for the execution of groups of tasks
-called <a href="https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html"><code>TaskGroup</code></a>. A TaskGroup requires a method for the generation of the tasks, which will
-be executed at the beginning of each cycle, and a method for the execution of they taks itself,
-which will be executed for each task.</p>
+called <a href="https://fede1024.github.io/rust-scheduled-executor/scheduled_executor/executor/struct.ThreadPoolExecutor.html"><code>TaskGroup</code></a>. A <code>TaskGroup</code> requires a method for the generation of the collection of
+tasks, which will be executed at the beginning of each cycle, and a method for the execution of
+individual task, which will be executed for each task.</p>
 
-<p>To see a task group in action, check out the <a href="https://github.com/fede1024/rust-scheduled-executor/blob/master/examples/task_group.rs">task_group.rs</a> example.</p>
+<p>To see a task group in action, check out the <a href="https://github.com/fede1024/rust-scheduled-executor/blob/master/examples/task_group.rs"><code>task_group.rs</code></a> example.</p>
 
 <h3 id='documentation' class='section-header'><a href='#documentation'>Documentation</a></h3>
 <ul>
