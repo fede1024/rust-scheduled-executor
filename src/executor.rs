@@ -31,10 +31,13 @@ impl TaskHandle {
         TaskHandle { should_stop: Arc::new(AtomicBool::new(false)) }
     }
 
+    /// Stops the correspondent task. Not that a running task won't be interrupted, but
+    /// future tasks executions will be prevented.
     pub fn stop(&self) {
         self.should_stop.store(true, Ordering::Relaxed);
     }
 
+    /// Returns true if the task is stopped.
     pub fn stopped(&self) -> bool {
         self.should_stop.load(Ordering::Relaxed)
     }
