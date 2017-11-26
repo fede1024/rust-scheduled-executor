@@ -85,7 +85,7 @@ impl TaskGroup for ServiceHealth {
 
 
 fn main() {
-    /// Create a multi threaded executor
+    // Create a multi threaded executor
     let executor = ThreadPoolExecutor::new(4)
         .expect("Thread pool creation failed");
 
