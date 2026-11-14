@@ -1,5 +1,8 @@
 # scheduled-executor
 
+> [!WARNING]
+> **This project is no longer actively maintained.** This repository is kept for reference only and is not receiving updates.
+
 [![crates.io](https://img.shields.io/crates/v/scheduled-executor.svg)](https://crates.io/crates/scheduled-executor)
 [![docs.rs](https://docs.rs/scheduled-executor/badge.svg)](https://docs.rs/scheduled-executor/)
 [![Build Status](https://travis-ci.org/fede1024/rust-scheduled-executor.svg?branch=master)](https://travis-ci.org/fede1024/rust-scheduled-executor)
